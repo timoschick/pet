@@ -85,7 +85,7 @@ def main():
                              "proportional to its score on the training set before fine-tuning.")
     args = parser.parse_args()
 
-    if os.path.exists(args.output) and not args.overwrite_output_file:
+    if os.path.exists(args.output_file) and not args.overwrite_output_file:
         logger.error("Output file already exists")
         exit()
 
