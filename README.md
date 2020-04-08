@@ -123,3 +123,16 @@ To train the final model based on the newly created logits file, `run_training.p
     
 where `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME` and `LOGITS_FILE` are as before and `FINAL_OUTPUT_DIR` is the dir in which the final model and its evaluation result are saved.
 
+## Citation
+
+If you make use of the code in this repository, please cite the following paper:
+
+    @article{schick2020exploiting,
+      title={Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference},
+      author={Timo Schick and Hinrich Schütze},
+      journal={Computing Research Repository},
+      volume={arXiv:2001.07676},
+      url={http://arxiv.org/abs/2001.07676},
+      year={2020}
+    }
+
