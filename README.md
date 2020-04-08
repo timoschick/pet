@@ -98,7 +98,7 @@ for results **with** auxiliary language modeling.
 For each pattern id `<P>` and repetition `<R>`, the above script creates a folder `p<P>-i<R>` in `OUTPUT_DIR`.
 The argument `--save_train_logits` causes the script to create a file `logits.txt` in each of these folders, which contains the logits that the trained model assigns to each example that was also used for language modeling (see above). The logits can be merged using `merge_logits.py` as follows:
 
-    python3 merge_logits.py --logits_dir OUTPUT_DIR --output LOGITS_FILE --reduction REDUCTION
+    python3 merge_logits.py --logits_dir OUTPUT_DIR --output_file LOGITS_FILE --reduction REDUCTION
     
  where `LOGITS_FILE` is the file to which the merged logits are saved and `REDUCTION` is either `mean` or `wmean`, with `mean` corresponding to the *uniform* variant and `wmean` corresponding to the *weighted* variant described in the paper.
  
