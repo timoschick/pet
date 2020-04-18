@@ -1,0 +1,14 @@
+name: pet
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.6
+  - pip=20.0
+  - numpy=1.17
+  - jsonpickle=1.1
+  - scikit-learn=0.19.1
+  - pytorch=1.2
+  - pip:
+      - transformers==2.2
