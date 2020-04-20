@@ -226,8 +226,8 @@ class TransformerModelWrapper:
                     loss = outputs[0]
                 else:
                     mlm_labels = batch[4].to(device)
-                    prediction_scores = self.preprocessor.verbalizer.convert_mlm_logits_to_cls_logits(mlm_labels,
-                                                                                                      outputs[0])
+                    prediction_scores = self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(mlm_labels,
+                                                                                               outputs[0])
                     labels = batch[3].to(device)
                     loss_fct = nn.CrossEntropyLoss()
                     loss = loss_fct(prediction_scores.view(-1, len(self.config.label_list)), labels.view(-1))
@@ -305,7 +305,7 @@ class TransformerModelWrapper:
                 outputs = self.model(**inputs)
                 logits = outputs[0]
                 if self.config.wrapper_type == MLM_WRAPPER:
-                    logits = self.preprocessor.verbalizer.convert_mlm_logits_to_cls_logits(mlm_labels, logits)
+                    logits = self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(mlm_labels, logits)
             nb_eval_steps += 1
             if preds is None:
                 preds = logits.detach().cpu().numpy()

@@ -19,7 +19,7 @@ This file shows an example of a PVP for a new task.
 
 from typing import List
 
-from preprocessor import VERBALIZERS
+from preprocessor import PVPS
 from pvp import PVP
 from utils import InputExample
 
@@ -69,4 +69,4 @@ class MyTaskPVP(PVP):
 
 
 # register the PVP for this task with its name
-VERBALIZERS[MyTaskPVP.TASK_NAME] = MyTaskPVP
+PVPS[MyTaskPVP.TASK_NAME] = MyTaskPVP

@@ -5,7 +5,7 @@ from utils import InputFeatures, InputExample
 from pvp import AgnewsPVP, MnliPVP, YelpPolarityPVP, YelpFullPVP, \
     YahooPVP, PVP
 
-VERBALIZERS = {
+PVPS = {
     'agnews': AgnewsPVP,
     'mnli': MnliPVP,
     'yelp-polarity': YelpPolarityPVP,
@@ -18,7 +18,7 @@ class Preprocessor(ABC):
 
     def __init__(self, wrapper, task_name, pattern_id: int = 0, verbalizer_file: str = None):
         self.wrapper = wrapper
-        self.verbalizer = VERBALIZERS[task_name](self.wrapper, pattern_id, verbalizer_file)  # type: PVP
+        self.pvp = PVPS[task_name](self.wrapper, pattern_id, verbalizer_file)  # type: PVP
         self.label_map = {label: i for i, label in enumerate(self.wrapper.config.label_list)}
 
     @abstractmethod
@@ -29,7 +29,7 @@ class Preprocessor(ABC):
 class MLMPreprocessor(Preprocessor):
 
     def get_input_features(self, example: InputExample, labelled: bool, **kwargs) -> InputFeatures:
-        input_ids, token_type_ids = self.verbalizer.encode(example)
+        input_ids, token_type_ids = self.pvp.encode(example)
 
         attention_mask = [1] * len(input_ids)
         padding_length = self.wrapper.config.max_seq_length - len(input_ids)
@@ -46,7 +46,7 @@ class MLMPreprocessor(Preprocessor):
         logits = example.logits if example.logits else [-1]
 
         if labelled:
-            mlm_labels = self.verbalizer.get_mask_positions(input_ids)
+            mlm_labels = self.pvp.get_mask_positions(input_ids)
         else:
             mlm_labels = [-1] * self.wrapper.config.max_seq_length
 
