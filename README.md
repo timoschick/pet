@@ -1,8 +1,27 @@
 # Pattern-Exploiting Training (PET)
 
-This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676).
+This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676). The paper introduces pattern-exploiting training (PET), a semi-supervised training
+procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings.
 
-## Usage
+| # Examples | Training Method | Yelp (Full) | AG's News | Yahoo Questions | MNLI     |
+| ----------:| --------------- | -----------:| ---------:| ---------------:| --------:|
+|         10 | supervised      |        21.1 |      25.0 |            10.1 |     34.2 |
+|         10 | PET             |    **52.9** |  **87.5** |        **63.8** | **41.8** |
+|        100 | supervised      |        53.0 |      86.0 |            62.9 |     47.9 |
+|        100 | PET             |    **61.9** |  **88.3** |        **69.2** | **74.7** |
+
+## 📑 Contents
+
+#### [⚙️ Setup](#%EF%B8%8F-setup)
+#### [💬 Usage](#-usage)
+#### [🐶 Train your own PET](#-train-your-own-pet)
+#### [📕 Citation](#-citation)
+
+## ⚙️ Setup
+
+PET requires `Python>=3.6`, `numpy==1.17`, `jsonpickle==1.1`, `scikit-learn==0.19`, `pytorch==1.2` and `transformers==2.2`. If you use `conda`, you can simply create an environment with all required dependencies from the `environment.yml` file found in the root of this repository. 
+
+## 💬 Usage
 
 The code in this repository currently supports 3 different training modes (supervised, unsupervised and PET) and 4 different tasks (Yelp Reviews, AG's News, Yahoo Questions and MNLI). For details, please refer to [the original paper](https://arxiv.org/abs/2001.07676).
 
@@ -123,7 +142,72 @@ To train the final model based on the newly created logits file, `run_training.p
     
 where `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME` and `LOGITS_FILE` are as before and `FINAL_OUTPUT_DIR` is the dir in which the final model and its evaluation result are saved.
 
-## Citation
+## 🐶 Train your own PET
+
+To use PET for custom tasks, you need to define two things: 
+
+- a **DataProcessor**, responsible for loading training and test data. See `examples/custom_task_processor.py` for an example.
+- a **PVP**, responsible for applying patterns to inputs and mapping labels to natural language verbalizations. See `examples/custom_task_pvp.py` for an example.
+
+After having implemented the DataProcessor and the PVP, you can train a PET model using the command line as [described above](#pet-training-and-evaluation). Below, you can find additional information on how to define the two components of a PVP, *verbalizers* and *patterns*.
+
+### Verbalizers
+
+Verbalizers are used to map task labels to words in natural language. For example, in a binary sentiment classification task, you could map the positive label (`+1`) to the word `good` and the negative label (`-1`) to the word `bad`. Verbalizers are realized through a PVP's `verbalize()` method. The simplest way of defining a verbalizer is to use a dictionary:
+
+```python
+VERBALIZER = {"+1": ["good"], "-1": ["bad"]}
+    
+def verbalize(self, label) -> List[str]:
+    return self.VERBALIZER[label]       
+```
+
+Importantly, in PET's current version, verbalizers are restricted to **single tokens** in the underlying LMs vocabulary. Given a language model's tokenizer, you can easily check whether a word corresponds to a single token by verifying that `len(tokenizer.tokenize(word)) == 1`.
+
+You can also define multiple verbalizations for a single label. For example, if you are unsure which words best represent the labels in a binary sentiment classification task, you could define your verbalizer as follows:
+
+```python
+VERBALIZER = {"+1": ["great", "good", "wonderful", "perfect"], "-1": ["bad", "terrible", "horrible"]}
+```
+
+### Patterns
+
+Patterns are used to make the language model understand a given task; they must contain exactly one `<MASK>` token which is to be filled using the verbalizer. For binary sentiment classification based on a review's summary (`<A>`) and body (`<B>`), a suitable pattern may be `<A>. <B>. Overall, it was <MASK>.` Patterns are realized through a PVP's `get_parts()` method, which returns a pair of text sequences (where each sequence is represented by a list of strings):
+
+```python
+def get_parts(self, example: InputExample):
+    return [example.text_a, '.', example.text_b, '.'], ['Overall, it was ', self.mask]
+```
+
+If you do not want to use a pair of sequences, you can simply leave the second sequence empty:
+
+```python
+def get_parts(self, example: InputExample):
+    return [example.text_a, '.', example.text_b, '. Overall, it was ', self.mask], []
+```
+            
+If you want to define several patterns, simply use the `PVP`s `pattern_id` attribute:
+
+```python
+def get_parts(self, example: InputExample):
+    if self.pattern_id == 1:
+        return [example.text_a, '.', example.text_b, '.'], ['Overall, it was ', self.mask]
+    elif self.pattern_id == 2:
+        return ['It was just ', self.mask, '!', example.text_a, '.', example.text_b, '.'], []
+```
+
+When training the model using the command line, specify all patterns to be used (e.g., `--pattern_ids 1 2`).
+
+Importantly, if a sequence is longer than the specified maximum sequence length of the underlying LM, PET must know which parts of the input can be shortened and which ones cannot (for example, the mask token must always be there). Therefore, `PVP` provides a `shortenable()` method to indicate that a piece of text can be shortened:
+
+```python
+def get_parts(self, example: InputExample):
+    text_a = self.shortenable(example.text_a)
+    text_b = self.shortenable(example.text_b)
+    return [text_a, '.', text_b, '. Overall, it was ', self.mask], []
+```
+
+## 📕 Citation
 
 If you make use of the code in this repository, please cite the following paper:
 
