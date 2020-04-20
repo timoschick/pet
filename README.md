@@ -12,10 +12,13 @@ procedure that reformulates input examples as cloze-style phrases and significan
 
 ## 📑 Contents
 
-#### [⚙️ Setup](#%EF%B8%8F-setup)
-#### [💬 Usage](#-usage)
-#### [🐶 Train your own PET](#-train-your-own-pet)
-#### [📕 Citation](#-citation)
+**[⚙️ Setup](#%EF%B8%8F-setup)**
+
+**[💬 Usage](#-usage)**
+
+**[🐶 Train your own PET](#-train-your-own-pet)**
+
+**[📕 Citation](#-citation)**
 
 ## ⚙️ Setup
 
