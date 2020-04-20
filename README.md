@@ -1,7 +1,7 @@
 # Pattern-Exploiting Training (PET)
 
 This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676). The paper introduces pattern-exploiting training (PET), a semi-supervised training
-procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings.
+procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings. The following table shows results for RoBERTa (large) with regular supervised training and with PET for various tasks:
 
 | # Examples | Training Method | Yelp (Full) | AG's News | Yahoo Questions | MNLI     |
 | ----------:| --------------- | -----------:| ---------:| ---------------:| --------:|
