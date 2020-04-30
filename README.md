@@ -18,7 +18,7 @@ procedure that reformulates input examples as cloze-style phrases and significan
 | PET          |        61.9 |      88.3 |     69.2 |     74.7 |
 | iPET         |    **62.9** |  **89.6** | **71.2** | **78.4** |
 
-<sup>*Note*: The current release of PET does not support iterative training. iPET will be added within the next days.</sup>
+<sup>*Note*: To exactly reproduce the above results, make sure to use PET v1.0 (`git clone --branch v1.0`).</sup>
 
 ## 📑 Contents
 
