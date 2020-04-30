@@ -15,6 +15,7 @@ This file contains the logic for loading training and test data for all tasks.
 """
 
 import csv
+import json
 import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -274,13 +275,62 @@ class YelpFullProcessor(YelpPolarityProcessor):
         return ["1", "2", "3", "4", "5"]
 
 
+class XStanceProcessor(DataProcessor):
+    """Processor for the X-Stance data set."""
+
+    def __init__(self, language: str = None):
+        if language is not None:
+            assert language in ['de', 'fr']
+        self.language = language
+
+    def get_train_examples(self, data_dir, examples_per_label=-1, skip_first=0):
+        """See base class."""
+        return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train", examples_per_label,
+                                     skip_first=skip_first)
+
+    def get_dev_examples(self, data_dir, examples_per_label=-1, skip_first=0):
+        """See base class."""
+        return self._create_examples(os.path.join(data_dir, "test.jsonl"), "dev", examples_per_label,
+                                     skip_first=skip_first)
+
+    def get_labels(self):
+        """See base class."""
+        return ["FAVOR", "AGAINST"]
+
+    def _create_examples(self, path, set_type, max_examples=-1, skip_first=0):
+        """Creates examples for the training and dev sets."""
+        examples = LimitedExampleList(self.get_labels(), max_examples, skip_first)
+
+        with open(path, encoding='utf8') as f:
+            for line in f:
+                example_json = json.loads(line)
+                label = example_json['label']
+                id = example_json['id']
+                text_a = example_json['question']
+                text_b = example_json['comment']
+                language = example_json['language']
+
+                if self.language is not None and language != self.language:
+                    continue
+
+                example = InputExample(guid=id, text_a=text_a, text_b=text_b, label=label)
+                examples.add(example)
+                if examples.is_full():
+                    break
+
+        return examples.to_list()
+
+
 PROCESSORS = {
     "mnli": MnliProcessor,
     "mnli-mm": MnliMismatchedProcessor,
     "agnews": AgnewsProcessor,
     "yahoo": YahooAnswersProcessor,
     "yelp-polarity": YelpPolarityProcessor,
-    "yelp-full": YelpFullProcessor
+    "yelp-full": YelpFullProcessor,
+    "xstance-de": lambda: XStanceProcessor("de"),
+    "xstance-fr": lambda: XStanceProcessor("fr"),
+    "xstance": XStanceProcessor,
 }
 
 

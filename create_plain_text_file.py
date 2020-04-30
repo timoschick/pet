@@ -11,7 +11,7 @@
 # limitations under the License.
 
 """
-This script can be used to convert a labelled dataset into a plain text
+This script can be used to convert a labeled dataset into a plain text
 file that can be used for unsupervised language model pretraining.
 """
 import argparse

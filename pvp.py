@@ -312,3 +312,25 @@ class YelpFullPVP(YelpPolarityPVP):
 
     def verbalize(self, label) -> List[str]:
         return YelpFullPVP.VERBALIZER[label]
+
+
+class XStancePVP(PVP):
+    VERBALIZERS = {
+        'en': {"FAVOR": ["Yes"], "AGAINST": ["No"]},
+        'de': {"FAVOR": ["Ja"], "AGAINST": ["Nein"]},
+        'fr': {"FAVOR": ["Oui"], "AGAINST": ["Non"]}
+    }
+
+    def get_parts(self, example: InputExample):
+
+        text_a = self.shortenable(example.text_a)
+        text_b = self.shortenable(example.text_b)
+
+        if self.pattern_id == 0 or self.pattern_id == 2 or self.pattern_id == 4:
+            return ['"', text_a, '"'], [self.mask, '. "', text_b, '"']
+        elif self.pattern_id == 1 or self.pattern_id == 3 or self.pattern_id == 5:
+            return [text_a], [self.mask, '.', text_b]
+
+    def verbalize(self, label) -> List[str]:
+        lang = 'de' if self.pattern_id < 2 else 'en' if self.pattern_id < 4 else 'fr'
+        return XStancePVP.VERBALIZERS[lang][label]
