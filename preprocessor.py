@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from utils import InputFeatures, InputExample
 
 from pvp import AgnewsPVP, MnliPVP, YelpPolarityPVP, YelpFullPVP, \
-    YahooPVP, PVP
+    YahooPVP, PVP, XStancePVP
 
 PVPS = {
     'agnews': AgnewsPVP,
@@ -11,6 +11,9 @@ PVPS = {
     'yelp-polarity': YelpPolarityPVP,
     'yelp-full': YelpFullPVP,
     'yahoo': YahooPVP,
+    'xstance': XStancePVP,
+    'xstance-de': XStancePVP,
+    'xstance-fr': XStancePVP,
 }
 
 
