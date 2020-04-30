@@ -1,14 +1,32 @@
 # Pattern-Exploiting Training (PET)
 
 This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676). The paper introduces pattern-exploiting training (PET), a semi-supervised training
-procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings. The following table shows results for RoBERTa (large) with regular supervised training and with PET for various tasks:
+procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings. The iterative variant of PET (iPET) trains multiple generations of models and can even be used without any training data.
 
-| # Examples | Training Method | Yelp (Full) | AG's News | Yahoo Questions | MNLI     |
-| ----------:| --------------- | -----------:| ---------:| ---------------:| --------:|
-|         10 | supervised      |        21.1 |      25.0 |            10.1 |     34.2 |
-|         10 | PET             |    **52.9** |  **87.5** |        **63.8** | **41.8** |
-|        100 | supervised      |        53.0 |      86.0 |            62.9 |     47.9 |
-|        100 | PET             |    **61.9** |  **88.3** |        **69.2** | **74.7** |
+##### Zero-Shot Learning
+
+|              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
+| ------------ | -----------:| ---------:| --------:| --------:|
+| unsupervised |        33.8 |      69.5 |     44.0 |     39.1 |
+| iPET         |    **56.7** |  **87.5** | **70.7** | **53.6** |
+
+##### 10 Training Examples
+
+|              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
+| ------------ | -----------:| ---------:| --------:| --------:|
+| supervised   |        21.1 |      25.0 |     10.1 |     34.2 |
+| PET          |        52.9 |      87.5 |     63.8 |     41.8 |
+| iPET         |    **57.6** |  **89.3** | **70.7** | **43.2** |
+
+##### 100 Training Examples
+
+|              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
+| :----------- | -----------:| ---------:| --------:| --------:|
+| supervised   |        53.0 |      86.0 |     62.9 |     47.9 |
+| PET          |        61.9 |      88.3 |     69.2 |     74.7 |
+| iPET         |    **62.9** |  **89.6** | **71.2** | **78.4** |
+
+<sup>*Note*: The current release of PET does not support iterative training. iPET will be added in the next release.</sup>
 
 ## 📑 Contents
 
@@ -22,7 +40,7 @@ procedure that reformulates input examples as cloze-style phrases and significan
 
 ## ⚙️ Setup
 
-PET requires `Python>=3.6`, `numpy==1.17`, `jsonpickle==1.1`, `scikit-learn==0.19`, `pytorch==1.2` and `transformers==2.2`. If you use `conda`, you can simply create an environment with all required dependencies from the `environment.yml` file found in the root of this repository. 
+PET requires `Python>=3.6`, `numpy==1.17`, `jsonpickle==1.1`, `scikit-learn==0.19`, `pytorch==1.4` and `transformers==2.8`. If you use `conda`, you can simply create an environment with all required dependencies from the `environment.yml` file found in the root of this repository. 
 
 ## 💬 Usage
 

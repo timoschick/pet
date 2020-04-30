@@ -9,6 +9,6 @@ dependencies:
   - numpy=1.17
   - jsonpickle=1.1
   - scikit-learn=0.19.1
-  - pytorch=1.2
+  - pytorch=1.4
   - pip:
-      - transformers==2.2
+      - transformers==2.8.0

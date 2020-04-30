@@ -15,7 +15,6 @@ This file contains code for wrapping a transformer language model and
 provides convenience methods for training and inference.
 """
 import json
-import math
 
 import jsonpickle
 import os
@@ -28,12 +27,17 @@ import numpy as np
 from torch.utils.data import RandomSampler, DataLoader, SequentialSampler, TensorDataset
 from tqdm import trange, tqdm
 from transformers import InputExample, AdamW, get_linear_schedule_with_warmup, PreTrainedTokenizer, BertForMaskedLM, \
-    RobertaForMaskedLM
+    RobertaForMaskedLM, XLMRobertaForMaskedLM
 from transformers import (BertConfig,
                           BertForSequenceClassification, BertTokenizer,
                           RobertaConfig,
                           RobertaForSequenceClassification,
-                          RobertaTokenizer)
+                          RobertaTokenizer,
+                          XLMRobertaConfig,
+                          XLMRobertaForSequenceClassification,
+                          XLMRobertaTokenizer,
+                          )
+from transformers import __version__ as transformers_version
 from transformers.data.metrics import simple_accuracy
 
 import log
@@ -65,6 +69,12 @@ MODEL_CLASSES = {
         'tokenizer': RobertaTokenizer,
         SEQUENCE_CLASSIFIER_WRAPPER: RobertaForSequenceClassification,
         MLM_WRAPPER: RobertaForMaskedLM
+    },
+    'xlm-roberta': {
+        'config': XLMRobertaConfig,
+        'tokenizer': XLMRobertaTokenizer,
+        SEQUENCE_CLASSIFIER_WRAPPER: XLMRobertaForSequenceClassification,
+        MLM_WRAPPER: XLMRobertaForMaskedLM
     }
 }
 
@@ -351,7 +361,14 @@ class TransformerModelWrapper:
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
 
         masked_indices = torch.bernoulli(probability_matrix).bool()
-        labels[~masked_indices] = -1  # We only compute loss on masked tokens
+
+        # if a version of transformers < 2.4.0 is used, -1 is the expected value for indices to ignore
+        if [int(v) for v in transformers_version.split('.')][:3] >= [2, 4, 0]:
+            ignore_value = -100
+        else:
+            ignore_value = -1
+
+        labels[~masked_indices] = ignore_value  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
         indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
