@@ -21,37 +21,9 @@ from typing import List
 import numpy as np
 
 import log
-import utils
+from utils import LogitsList
 
 logger = log.get_logger('root')
-
-
-class LogitsList:
-    def __init__(self, score: float, logits: List[List[float]]):
-        self.score = score
-        self.logits = logits
-
-    def __repr__(self):
-        return 'LogitsList(score={}, logits[:2]={})'.format(self.score, self.logits[:2])
-
-    def save(self, path: str) -> None:
-        with open(path, 'w') as fh:
-            fh.write(str(self.score) + '\n')
-            for example_logits in self.logits:
-                fh.write(' '.join(str(logit) for logit in example_logits) + '\n')
-
-    @staticmethod
-    def load(path: str, with_score: bool = True) -> 'LogitsList':
-        score = -1
-        logits = []
-        with open(path, 'r') as fh:
-            for line_idx, line in enumerate(fh.readlines()):
-                line = line.rstrip('\n')
-                if line_idx == 0 and with_score:
-                    score = float(line)
-                else:
-                    logits.append([float(x) for x in line.split()])
-        return LogitsList(score=score, logits=logits)
 
 
 def merge_logits_lists(logits_lists: List[LogitsList], reduction: str = 'mean') -> LogitsList:

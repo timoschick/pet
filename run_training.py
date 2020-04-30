@@ -22,8 +22,7 @@ from collections import defaultdict
 import torch
 
 from tasks import PROCESSORS, load_examples
-from merge_logits import LogitsList
-from utils import set_seed, eq_div, save_logits
+from utils import set_seed, eq_div, save_logits, LogitsList, InputExample
 from wrapper import TransformerModelWrapper, WRAPPER_TYPES
 import log
 
@@ -65,6 +64,9 @@ def main():
     parser.add_argument("--save_train_logits", action='store_true',
                         help="Whether to save logits on the lm_train_examples in a separate file. This takes some "
                              "additional time but is required for combining PVPs  (only for PET training)")
+    parser.add_argument("--additional_data_dir", default=None, type=str,
+                        help="Path to a directory containing additional automatically labeled training examples (only "
+                             "for iPET)")
     parser.add_argument("--per_gpu_helper_batch_size", default=4, type=int,
                         help="Batch size for the auxiliary task (only for PET training)")
     parser.add_argument("--alpha", default=0.9999, type=float,
@@ -176,10 +178,23 @@ def main():
 
                 results_dict['train_set_before_training'] = wrapper.eval(train_data, device, **vars(args))['acc']
 
+                pattern_iter_train_data = []
+                pattern_iter_train_data.extend(train_data)
+
+                if args.additional_data_dir:
+                    p = os.path.join(args.additional_data_dir, 'p{}-i{}-train.txt'.format(args.pattern_id, iteration))
+                    additional_data = InputExample.load_examples(p)
+                    for example in additional_data:
+                        example.logits = None
+                    pattern_iter_train_data.extend(additional_data)
+                    logger.info("Loaded {} additional examples from {}, total training size is now {}".format(
+                        len(additional_data), p, len(pattern_iter_train_data)
+                    ))
+
                 logger.info("Starting training...")
 
                 global_step, tr_loss = wrapper.train(
-                    train_data, device,
+                    pattern_iter_train_data, device,
                     helper_train_data=all_train_data if args.lm_training or args.use_logits else None,
                     tmp_dir=output_dir, **vars(args))
 

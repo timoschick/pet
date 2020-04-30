@@ -26,7 +26,7 @@ PET requires `Python>=3.6`, `numpy==1.17`, `jsonpickle==1.1`, `scikit-learn==0.1
 
 ## 💬 Usage
 
-The code in this repository currently supports 3 different training modes (supervised, unsupervised and PET) and 4 different tasks (Yelp Reviews, AG's News, Yahoo Questions and MNLI). For details, please refer to [the original paper](https://arxiv.org/abs/2001.07676).
+The code in this repository currently supports 4 different training modes (supervised, unsupervised, PET and iPET) and 4 different tasks (Yelp Reviews, AG's News, Yahoo Questions and MNLI). For details, please refer to [the original paper](https://arxiv.org/abs/2001.07676).
 
 ### Supervised Training and Evaluation
 
@@ -144,6 +144,16 @@ To train the final model based on the newly created logits file, `run_training.p
     --logits_file LOGITS_FILE
     
 where `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME` and `LOGITS_FILE` are as before and `FINAL_OUTPUT_DIR` is the dir in which the final model and its evaluation result are saved.
+
+### iPET Training and Evaluation
+
+🚨 iPET is still unter active development and has not yet been thoroughly tested. If you encounter any errors, please let us know! 🚨 
+
+For iteratively training multiple generations of iPET models, the script `create_ipet_training_set.py` can be used to generate training sets of increasing size. However, the easiest way to train an iPET model is to use `scripts/ipet.sh` as follows:
+
+1) Train a regular PET model as described in the previous section. You only need to run the first step ("Training Individual PVP Models").
+2) Move to the `scripts` directory and run `./ipet.sh TASK_NAME DATA_DIR OUTPUT_DIR TRAIN_EXAMPLES` where `TASK_NAME`, `DATA_DIR`, `OUTPUT_DIR` and `TRAIN_EXAMPLES` are as before.  
+For each generation `X`, this will create a new directory `OUTPUT_DIR-iX`. The final model and all evaluation files will be stored in a directory `OUTPUT_DIR-iX-distilled`. Note that the script currently only supports four tasks and training with 10, 50 or 100 examples.
 
 ## 🐶 Train your own PET
 

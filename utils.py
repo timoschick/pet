@@ -1,10 +1,39 @@
 import copy
 import json
+import pickle
 import random
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import torch
+
+
+class LogitsList:
+    def __init__(self, score: float, logits: List[List[float]]):
+        self.score = score
+        self.logits = logits
+
+    def __repr__(self):
+        return 'LogitsList(score={}, logits[:2]={})'.format(self.score, self.logits[:2])
+
+    def save(self, path: str) -> None:
+        with open(path, 'w') as fh:
+            fh.write(str(self.score) + '\n')
+            for example_logits in self.logits:
+                fh.write(' '.join(str(logit) for logit in example_logits) + '\n')
+
+    @staticmethod
+    def load(path: str, with_score: bool = True) -> 'LogitsList':
+        score = -1
+        logits = []
+        with open(path, 'r') as fh:
+            for line_idx, line in enumerate(fh.readlines()):
+                line = line.rstrip('\n')
+                if line_idx == 0 and with_score:
+                    score = float(line)
+                else:
+                    logits.append([float(x) for x in line.split()])
+        return LogitsList(score=score, logits=logits)
 
 
 class InputExample(object):
@@ -27,6 +56,16 @@ class InputExample(object):
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
+    @staticmethod
+    def load_examples(path: str) -> List['InputExample']:
+        with open(path, 'rb') as fh:
+            return pickle.load(fh)
+
+    @staticmethod
+    def save_examples(examples: List['InputExample'], path: str) -> None:
+        with open(path, 'wb') as fh:
+            pickle.dump(examples, fh)
 
 
 class InputFeatures(object):
@@ -79,3 +118,22 @@ def save_result(path: str, results: Dict[str, float], key: str = None):
             fh.write(str(results[key]) + '\n')
         else:
             fh.write(str(results) + '\n')
+
+
+def softmax(x, temperature=1.0, axis=None):
+    """Custom softmax implementation"""
+    y = np.atleast_2d(x)
+
+    if axis is None:
+        axis = next(j[0] for j in enumerate(y.shape) if j[1] > 1)
+
+    y = y * float(temperature)
+    y = y - np.expand_dims(np.max(y, axis=axis), axis)
+    y = np.exp(y)
+
+    ax_sum = np.expand_dims(np.sum(y, axis=axis), axis)
+    p = y / ax_sum
+
+    if len(x.shape) == 1:
+        p = p.flatten()
+    return p
