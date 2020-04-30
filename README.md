@@ -3,21 +3,54 @@
 This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676). The paper introduces pattern-exploiting training (PET), a semi-supervised training
 procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings. The iterative variant of PET (iPET) trains multiple generations of models and can even be used without any training data.
 
-##### Zero-Shot Learning
-
-|              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
-| ------------ | -----------:| ---------:| --------:| --------:|
-| unsupervised |        33.8 |      69.5 |     44.0 |     39.1 |
-| iPET         |    **56.7** |  **87.5** | **70.7** | **53.6** |
-
-##### 100 Training Examples
-
-|              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
-| :----------- | -----------:| ---------:| --------:| --------:|
-| supervised   |        53.0 |      86.0 |     62.9 |     47.9 |
-| PET          |        61.9 |      88.3 |     69.2 |     74.7 |
-| iPET         |    **62.9** |  **89.6** | **71.2** | **78.4** |
-
+<table>
+    <tr>
+        <th>#Examples</th>
+        <th>Training Mode</th>
+        <th>Yelp (Full)</th>
+        <th>AG's News</th>
+        <th>Yahoo Questions</th>
+        <th>MNLI</th>
+    </tr>
+    <tr>
+        <td rowspan="2" align="center"><b>0</b></td>
+        <td>unsupervised</td>
+        <td align="right">33.8</td>
+        <td align="right">69.5</td>
+        <td align="right">44.0</td>
+        <td align="right">39.1</td>
+    </tr>
+    <tr>
+        <td>iPET</td>
+        <td align="right"><b>56.7</b></td>
+        <td align="right"><b>87.5</b></td>
+        <td align="right"><b>70.7</b></td>
+        <td align="right"><b>53.6</b></td>
+    </tr>
+    <tr>
+        <td rowspan="3" align="center"><b>100</b></td>
+        <td>supervised</td>
+        <td align="right">53.0</td>
+        <td align="right">86.0</td>
+        <td align="right">62.9</td>
+        <td align="right">47.9</td>
+    </tr>
+    <tr>
+        <td>PET</td>
+        <td align="right">61.9</td>
+        <td align="right">88.3</td>
+        <td align="right">69.2</td>
+        <td align="right">74.7</td>
+    </tr>
+    <tr>
+        <td>iPET</td>
+        <td align="right"><b>62.9</b></td>
+        <td align="right"><b>89.6</b></td>
+        <td align="right"><b>71.2</b></td>
+        <td align="right"><b>78.4</b></td>
+    </tr>
+</table>
+    
 <sup>*Note*: To exactly reproduce the above results, make sure to use v1.0 for PET (`git clone --branch v1.0`) and v1.1 for iPET.</sup>
 
 ## 📑 Contents
