@@ -3,14 +3,14 @@
 This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676). The paper introduces pattern-exploiting training (PET), a semi-supervised training
 procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings. The iterative variant of PET (iPET) trains multiple generations of models and can even be used without any training data.
 
-##### 🧩 Zero-Shot Learning
+##### Zero-Shot Learning
 
 |              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
 | ------------ | -----------:| ---------:| --------:| --------:|
 | unsupervised |        33.8 |      69.5 |     44.0 |     39.1 |
 | iPET         |    **56.7** |  **87.5** | **70.7** | **53.6** |
 
-##### 💯 100 Training Examples
+##### 100 Training Examples
 
 |              | Yelp (Full) | AG's News | Yahoo    | MNLI     |
 | :----------- | -----------:| ---------:| --------:| --------:|
@@ -18,7 +18,7 @@ procedure that reformulates input examples as cloze-style phrases and significan
 | PET          |        61.9 |      88.3 |     69.2 |     74.7 |
 | iPET         |    **62.9** |  **89.6** | **71.2** | **78.4** |
 
-<sup>*Note*: To exactly reproduce the above results, make sure to use PET v1.0 (`git clone --branch v1.0`).</sup>
+<sup>*Note*: To exactly reproduce the above results, make sure to use v1.0 for PET (`git clone --branch v1.0`) and v1.1 for iPET.</sup>
 
 ## 📑 Contents
 
@@ -36,7 +36,7 @@ PET requires `Python>=3.6`, `numpy==1.17`, `jsonpickle==1.1`, `scikit-learn==0.1
 
 ## 💬 Usage
 
-The code in this repository currently supports 4 different training modes (supervised, unsupervised, PET and iPET) and 4 different tasks (Yelp Reviews, AG's News, Yahoo Questions and MNLI). For details, please refer to [the original paper](https://arxiv.org/abs/2001.07676).
+The code in this repository currently supports 4 different training modes (supervised, unsupervised, PET and iPET) and 5 different tasks (Yelp Reviews, AG's News, Yahoo Questions, MNLI and X-Stance). For details, please refer to [the original paper](https://arxiv.org/abs/2001.07676).
 
 ### Supervised Training and Evaluation
 
@@ -157,7 +157,7 @@ where `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME` and `LOGITS_FILE` are 
 
 ### iPET Training and Evaluation
 
-🚨 iPET is still unter active development and has not yet been thoroughly tested. If you encounter any errors, please let us know! 🚨 
+🚨 iPET is still unter active development and has not yet been thoroughly tested. If you encounter any errors, please let us know!
 
 For iteratively training multiple generations of iPET models, the script `create_ipet_training_set.py` can be used to generate training sets of increasing size. However, the easiest way to train an iPET model is to use `scripts/ipet.sh` as follows:
 
