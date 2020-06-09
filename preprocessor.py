@@ -66,14 +66,17 @@ class SequenceClassifierPreprocessor(Preprocessor):
             add_special_tokens=True,
             max_length=self.wrapper.config.max_seq_length,
         )
-        input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
+        input_ids, token_type_ids = inputs["input_ids"], inputs.get("token_type_ids")
 
         attention_mask = [1] * len(input_ids)
         padding_length = self.wrapper.config.max_seq_length - len(input_ids)
 
         input_ids = input_ids + ([self.wrapper.tokenizer.pad_token_id] * padding_length)
         attention_mask = attention_mask + ([0] * padding_length)
-        token_type_ids = token_type_ids + ([0] * padding_length)
+        if not token_type_ids:
+            token_type_ids = [0] * self.wrapper.config.max_seq_length
+        else:
+            token_type_ids = token_type_ids + ([0] * padding_length)
         mlm_labels = [-1] * len(input_ids)
 
         assert len(input_ids) == self.wrapper.config.max_seq_length
