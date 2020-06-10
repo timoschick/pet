@@ -61,8 +61,8 @@ class SequenceClassifierPreprocessor(Preprocessor):
 
     def get_input_features(self, example: InputExample, **kwargs) -> InputFeatures:
         inputs = self.wrapper.tokenizer.encode_plus(
-            example.text_a,
-            example.text_b,
+            example.text_a if example.text_a else None,
+            example.text_b if example.text_b else None,
             add_special_tokens=True,
             max_length=self.wrapper.config.max_seq_length,
         )
