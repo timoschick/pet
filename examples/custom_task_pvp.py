@@ -19,9 +19,8 @@ This file shows an example of a PVP for a new task.
 
 from typing import List
 
-from preprocessor import PVPS
-from pvp import PVP
-from utils import InputExample
+from pet.pvp import PVP, PVPS
+from pet.utils import InputExample
 
 
 class MyTaskPVP(PVP):

@@ -1,0 +1,8 @@
+-f https://download.pytorch.org/whl/torch_stable.html
+numpy==1.19
+jsonpickle==1.1
+scikit-learn==0.23.1
+torch===1.5.0
+torchvision==0.6.0
+transformers==3.0.2
+tqdm==4.48.1

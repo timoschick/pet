@@ -1,9 +1,6 @@
 # Pattern-Exploiting Training (PET)
 
-> 🚨 This repository does not yet contain the modifications to PET introduced in "[It's Not Just Size That Matters: Small Language Models Are Also Few-Shot Learners](https://arxiv.org/abs/2009.07118)" but will be updated soon.
-
-This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676). The paper introduces pattern-exploiting training (PET), a semi-supervised training
-procedure that reformulates input examples as cloze-style phrases and significantly outperforms regular supervised training in low-resource settings. The iterative variant of PET (iPET) trains multiple generations of models and can even be used without any training data.
+This repository contains the code for [Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference](https://arxiv.org/abs/2001.07676) and [It's Not Just Size That Matters: Small Language Models Are Also Few-Shot Learners](https://arxiv.org/abs/2009.07118). The papers introduce pattern-exploiting training (PET), a semi-supervised training procedure that reformulates input examples as cloze-style phrases. In low-resource settings, PET and iPET significantly outperform regular supervised training, various semi-supervised baselines and even GPT-3 despite requiring 99.9% less parameters. The iterative variant of PET (iPET) trains multiple generations of models and can even be used without any training data.
 
 <table>
     <tr>
@@ -53,152 +50,106 @@ procedure that reformulates input examples as cloze-style phrases and significan
     </tr>
 </table>
     
-<sup>*Note*: To exactly reproduce the above results, make sure to use v1.0 for PET (`git clone --branch v1.0`) and v1.1 for iPET.</sup>
+<sup>*Note*: To exactly reproduce the above results, make sure to use v1.1.0 (`--branch v1.1.0`).</sup>
 
 ## 📑 Contents
 
-**[⚙️ Setup](#%EF%B8%8F-setup)**
+**[🔧 Setup](#-setup)**
 
-**[💬 Usage](#-usage)**
+**[💬 CLI Usage](#-cli-usage)**
+
+**[💻 API Usage](#-api-usage)**
 
 **[🐶 Train your own PET](#-train-your-own-pet)**
 
 **[📕 Citation](#-citation)**
 
-## ⚙️ Setup
+## 🔧 Setup
 
-PET requires `Python>=3.6`, `numpy==1.17`, `jsonpickle==1.1`, `scikit-learn==0.19`, `pytorch==1.4` and `transformers==2.8`. If you use `conda`, you can simply create an environment with all required dependencies from the `environment.yml` file found in the root of this repository. 
+All requirements for PET can be found in `requirements.txt`. You can install all required packages with `pip install -r requirements.txt`.
 
-## 💬 Usage
+## 💬 CLI Usage
 
-The code in this repository currently supports 4 different training modes (supervised, unsupervised, PET and iPET) and 5 different tasks (Yelp Reviews, AG's News, Yahoo Questions, MNLI and X-Stance). For details, please refer to [the original paper](https://arxiv.org/abs/2001.07676).
-
-### Supervised Training and Evaluation
-
-To fine-tune a pretrained language model on one of the four tasks with regular supervised training, only `run_training.py` is required. Training and evaluation can be performed as follows:
-
-    python3 run_training.py \
-    --wrapper_type sequence_classifier \
-    --train_examples TRAIN_EXAMPLES \
-    --data_dir DATA_DIR \
-    --model_type MODEL_TYPE \
-    --model_name_or_path MODEL_NAME \
-    --task_name TASK_NAME \
-    --output_dir OUTPUT_DIR \
-    --do_train \
-    --do_eval
-
-where
- - `TRAIN_EXAMPLES` is the number of train examples to use. The script will always distribute the number of examples evenly among all labels. For example, if you specify `TRAIN_EXAMPLES = 100` and the task has 3 different labels, the training set will contain 33, 33 and 34 examples for label 1, 2 and 3, respectively.
- - `DATA_DIR` is the directory containing the train and test csv files (check `tasks.py` to see how these files should be named for each task).
- - `MODEL_TYPE` is either `bert` or `roberta`.
- - `MODEL_NAME` is the name of a pretrained model (e.g., `roberta-large`) or the path to a pretrained model.
- - `TASK_NAME` is one of `yelp-full`, `agnews`, `yahoo` and `mnli`.
- - `OUTPUT_DIR` is the name of the directory in which the trained model and evaluation results are saved.
-
-To reproduce the exact results from the paper, you need to additionally specify `--gradient_accumulation_steps 4 --max_steps 250` when running this script.
-
-### Unsupervised Evaluation
-
-To evaluate a pretrained language model with the default PET patterns and verbalizers, but without fine-tuning, use the following:
-
-    python3 run_training.py \
-    --wrapper_type mlm \
-    --train_examples TRAIN_EXAMPLES \
-    --data_dir DATA_DIR \
-    --model_type MODEL_TYPE \ 
-    --model_name_or_path MODEL_NAME \
-    --task_name TASK_NAME \
-    --output_dir OUTPUT_DIR \
-    --do_train \
-    --do_eval \
-    --max_steps 0 \
-    --repetitions 1 \
-    --pattern_ids PATTERN_IDS
-
-where
- - `TRAIN_EXAMPLES`, `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME` and `OUTPUT_DIR` are as in the previous section.
- - `PATTERN_IDS` specifies the PVPs to use. Pattern ID `n` corresponds to `P_(n+1)` in the paper. If you want to use *all* patterns, specify `PATTERN_IDS 0 1 2 3 4` for AG's News and Yahoo Questions or `PATTERN_IDS 0 1 2 3` for Yelp Reviews and MNLI.
+The command line interface `cli.py` in this repository currently supports three different training modes (PET, iPET, supervised training), two additional evaluation methods (unsupervised and priming) and 13 different tasks. For Yelp Reviews, AG's News, Yahoo Questions, MNLI and X-Stance, see [the original paper](https://arxiv.org/abs/2001.07676) for further details. For the 8 SuperGLUE tasks, see [this paper](https://arxiv.org/abs/2009.07118).
 
 ### PET Training and Evaluation
 
-PET Training consists of three steps:
+To train and evaluate a PET model for one of the supported tasks, simply run the following command:
 
- 1) training the individual PVP models (see Section *PVP Training and Inference* in the paper)
- 2) combining the outputs produced by the individual models (see Section *Combining PVPs* in the paper)
- 3) training a new model on the soft labels produced in the previous step (see Section *Combining PVPs* in the paper)
+    python3 cli.py \
+	--method pet \
+	--pattern_ids $PATTERN_IDS \
+	--data_dir $DATA_DIR \
+	--model_type $MODEL_TYPE \
+	--model_name_or_path $MODEL_NAME_OR_PATH \
+	--task_name $TASK \
+	--output_dir $OUTPUT_DIR \
+	--do_train \
+	--do_eval
+    
+ where
+ - `$PATTERN_IDS` specifies the PVPs to use. For example, if you want to use *all* patterns, specify `PATTERN_IDS 0 1 2 3 4` for AG's News and Yahoo Questions or `PATTERN_IDS 0 1 2 3` for Yelp Reviews and MNLI.
+ - `$DATA_DIR` is the directory containing the train and test files (check `tasks.py` to see how these files should be named and formatted for each task).
+ - `$MODEL_TYPE` is the name of the model being used, e.g. `albert`, `bert` or `roberta`.
+ - `$MODEL_NAME` is the name of a pretrained model (e.g., `roberta-large` or `albert-xxlarge-v2`) or the path to a pretrained model.
+ - `$TASK_NAME` is the name of the task to train and evaluate on.
+ - `$OUTPUT_DIR` is the name of the directory in which the trained model and evaluation results are saved.
  
-#### Training Individual PVP Models
-
-Training individual PVP models is very similar to the unsupervised setting above:
-
-    python3 run_training.py \
-    --wrapper_type mlm \
-    --train_examples TRAIN_EXAMPLES \
-    --data_dir DATA_DIR \
-    --model_type MODEL_TYPE \ 
-    --model_name_or_path MODEL_NAME \
-    --task_name TASK_NAME \
-    --output_dir OUTPUT_DIR \
-    --do_train \
-    --do_eval \
-    --pattern_ids PATTERN_IDS \
-    --lm_train_examples_per_label 10000 \
-    --save_train_logits
-
-where `TRAIN_EXAMPLES`, `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME`, `OUTPUT_DIR` and `PATTERN_IDS` are as in the previous section.
-
-For auxiliary language modeling, the parameter `--lm_training` must additionally be set. The number passed to `--lm_train_examples_per_label` specifies the number of unlabelled examples per label to use for language modeling. The labels for these examples are **not** used during training.  
-
-To reproduce the exact results from the paper, you need to additionally specify
-
-    --gradient_accumulation_steps 4 --max_steps 250 
-    
-for results **without** auxiliary language modeling or
-
-    --gradient_accumulation_steps 4 --max_steps 1000 --per_gpu_train_batch_size 1 --per_gpu_helper_batch_size 3
-    
-for results **with** auxiliary language modeling.
-
-#### Combining PVPs
-
-For each pattern id `<P>` and repetition `<R>`, the above script creates a folder `p<P>-i<R>` in `OUTPUT_DIR`.
-The argument `--save_train_logits` causes the script to create a file `logits.txt` in each of these folders, which contains the logits that the trained model assigns to each example that was also used for language modeling (see above). The logits can be merged using `merge_logits.py` as follows:
-
-    python3 merge_logits.py --logits_dir OUTPUT_DIR --output_file LOGITS_FILE --reduction REDUCTION
-    
- where `LOGITS_FILE` is the file to which the merged logits are saved and `REDUCTION` is either `mean` or `wmean`, with `mean` corresponding to the *uniform* variant and `wmean` corresponding to the *weighted* variant described in the paper.
+You can additionally specify various training parameters for both the ensemble of PET models corresponding to individual PVPs (prefix `--pet_`) and for the final sequence classification model (prefix `--sc_`). For example, the default parameters used for our SuperGLUE evaluation are:
  
-#### Training the Final Model
-
-To train the final model based on the newly created logits file, `run_training.py` needs to be called again:
-
-    python3 run_training.py \
-    --wrapper_type sequence_classifier \
-    --data_dir DATA_DIR \
-    --model_type MODEL_TYPE \
-    --model_name_or_path MODEL_NAME \ 
-    --task_name TASK_NAME \
-    --output_dir FINAL_OUTPUT_DIR \
-    --do_train \
-    --do_eval \
-    --max_steps 5000 \
-    --train_examples 1 \
-    --lm_train_examples_per_label 10000 \
-    --temperature 2 \
-    --logits_file LOGITS_FILE
+ 	--pet_per_gpu_eval_batch_size 8 \
+	--pet_per_gpu_train_batch_size 2 \
+	--pet_gradient_accumulation_steps 8 \
+	--pet_max_steps 250 \
+	--pet_max_seq_length 256 \
+    --pet_repetitions 3 \
+	--sc_per_gpu_train_batch_size 2 \
+	--sc_per_gpu_unlabeled_batch_size 2 \
+	--sc_gradient_accumulation_steps 8 \
+	--sc_max_steps 5000 \
+	--sc_max_seq_length 256 \
+    --sc_repetitions 1
     
-where `DATA_DIR`, `MODEL_TYPE`, `MODEL_NAME`, `TASK_NAME` and `LOGITS_FILE` are as before and `FINAL_OUTPUT_DIR` is the dir in which the final model and its evaluation result are saved.
+For each pattern `$P` and repetition `$I`, running the above command creates a directory `$OUTPUT_DIR/p$P-i$I` that contains the following files:
+  - `pytorch_model.bin`: the finetuned model, possibly along with some model-specific files (e.g, `spiece.model`, `special_tokens_map.json`)
+  - `wrapper_config.json`: the configuration of the model being used
+  - `train_config.json`: the configuration used for training
+  - `eval_config.json`: the configuration used for evaluation
+  - `logits.txt`: the model's predictions on the unlabeled data
+  - `eval_logits.txt`: the model's prediction on the evaluation data
+  - `results.json`: a json file containing results such as the model's final accuracy
+  - `predictions.jsonl`: a prediction file for the evaluation set in the SuperGlue format
+  
+The final (distilled) model for each repetition `$I` can be found in `$OUTPUT_DIR/final/p0-i$I`, which contains the same files as described above.
+
+🚨 If your GPU runs out of memory during training, you can try decreasing both the `pet_per_gpu_train_batch_size` and the `sc_per_gpu_unlabeled_batch_size` while increasing both `pet_gradient_accumulation_steps` and `sc_gradient_accumulation_steps`.
+
 
 ### iPET Training and Evaluation
 
-🚨 iPET is still unter active development and has not yet been thoroughly tested. If you encounter any errors, please let us know!
+To train and evaluate an iPET model for one of the supported tasks, simply run the same command as above, but replace `--method pet` with `--method ipet`. There are various additional iPET parameters that you can modify; all of them are prefixed with `--ipet_`.
 
-For iteratively training multiple generations of iPET models, the script `create_ipet_training_set.py` can be used to generate training sets of increasing size. However, the easiest way to train an iPET model is to use `scripts/ipet.sh` as follows:
+For each generation `$G`, pattern `$P` and iteration `$I`, this creates a directory `$OUTPUT_DIR/g$G/p$P-i$I` that is structured as for regular PET. The final (distilled) model can again be found in `$OUTPUT_DIR/final/p0-i$I`.
 
-1) Train a regular PET model as described in the previous section. You only need to run the first step ("Training Individual PVP Models").
-2) Move to the `scripts` directory and run `./ipet.sh TASK_NAME DATA_DIR OUTPUT_DIR TRAIN_EXAMPLES` where `TASK_NAME`, `DATA_DIR`, `OUTPUT_DIR` and `TRAIN_EXAMPLES` are as before.  
-For each generation `X`, this will create a new directory `OUTPUT_DIR-iX`. The final model and all evaluation files will be stored in a directory `OUTPUT_DIR-iX-distilled`. Note that the script currently only supports four tasks and training with 10, 50 or 100 examples.
+🚨 If you use iPET with zero training examples, you need to specify how many examples for each label should be chosen in the first generation and you need to change the reduction strategy to mean: `--ipet_n_most_likely 100 --reduction mean`.
+
+### Supervised Training and Evaluation
+
+To train and evaluate a regular sequence classifier in a supervised fashion, simply run the same command as above, but replace `--method pet` with `--method sequence_classifier`. There are various additional parameters for the sequence classifier that you can modify; all of them are prefixed with `--sc_`.
+
+### Unsupervised Evaluation
+
+To evaluate a pretrained language model with the default PET patterns and verbalizers, but without fine-tuning, remove the argument `--do_train` and add `--no_distillation` so that no final distillation is performed.
+
+### Priming
+
+If you want to use priming, remove the argument `--do_train` and add the arguments `--priming --no_distillation` so that all training examples are used for priming and no final distillation is performed. 
+
+🚨 Remember that you may need to increase the maximum sequence length to a much larger value, e.g. `--pet_max_seq_length 5000`. This only works with language models that support such long sequences, e.g. XLNet. For using XLNet, you can specify `--model_type xlnet --model_name_or_path xlnet-large-cased --wrapper_type plm`.
+
+## 💻 API Usage
+
+Instead of using the command line interface, you can also directly use the PET API, most of which is defined in `pet.modeling`. By including `import pet`, you can access methods such as `train_pet`, `train_ipet` and `train_classifier`. Check out their documentation for more information.
 
 ## 🐶 Train your own PET
 
@@ -220,7 +171,7 @@ def verbalize(self, label) -> List[str]:
     return self.VERBALIZER[label]       
 ```
 
-Importantly, in PET's current version, verbalizers are restricted to **single tokens** in the underlying LMs vocabulary. Given a language model's tokenizer, you can easily check whether a word corresponds to a single token by verifying that `len(tokenizer.tokenize(word)) == 1`.
+Importantly, in PET's current version, verbalizers are by default restricted to **single tokens** in the underlying LMs vocabulary (for using more than one token, [see below](#pet-with-multiple-masks)). Given a language model's tokenizer, you can easily check whether a word corresponds to a single token by verifying that `len(tokenizer.tokenize(word)) == 1`.
 
 You can also define multiple verbalizations for a single label. For example, if you are unsure which words best represent the labels in a binary sentiment classification task, you could define your verbalizer as follows:
 
@@ -265,9 +216,13 @@ def get_parts(self, example: InputExample):
     return [text_a, '.', text_b, '. Overall, it was ', self.mask], []
 ```
 
+### PET with Multiple Masks
+
+By default, the current implementation of PET and iPET only supports a fixed set of labels that is shared across all examples and verbalizers that correspond to a single token. If you want to use verbalizers that correspond to multiple tokens ([as described here](http://arxiv.org/abs/2009.07118)), you need to define a custom `TaskHelper` and add it to the `TASK_HELPERS` dictionary in `pet/tasks.py`. As a starting point, you can check out the classes `CopaTaskHelper`, `WscTaskHelper` and `RecordTaskHelper` in `pet/task_helpers.py`. In the next release of PET, using verbalizers with multiple masks will be enabled by default.
+
 ## 📕 Citation
 
-If you make use of the code in this repository, please cite the following paper:
+If you make use of the code in this repository, please cite the following papers:
 
     @article{schick2020exploiting,
       title={Exploiting Cloze Questions for Few-Shot Text Classification and Natural Language Inference},
@@ -278,3 +233,11 @@ If you make use of the code in this repository, please cite the following paper:
       year={2020}
     }
 
+    @article{schick2020small,
+      title={It's Not Just Size That Matters: Small Language Models Are Also Few-Shot Learners},
+      author={Timo Schick and Hinrich Schütze},
+      journal={Computing Research Repository},
+      volume={arXiv:2009.07118},
+      url={http://arxiv.org/abs/2009.07118},
+      year={2020}
+    }
