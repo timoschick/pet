@@ -88,6 +88,177 @@ class TaskHelper(ABC):
         pass
 
 
+class MultiMaskTaskHelper(TaskHelper):
+    """A custom task helper for classification datasets where multiple masks are required for one or more verbalizers."""
+
+    def train_step(self, batch, **kwargs) -> Optional[torch.Tensor]:
+        if self.wrapper.config.wrapper_type == 'sequence_classifier':
+            return
+
+        assert self.wrapper.config.wrapper_type == 'mlm', 'train_step() for MultiMaskTaskHelper is only implemented for MLM models'
+        inputs = self.wrapper.generate_default_inputs(batch)
+        loss_fct = CrossEntropyLoss(reduction='none')
+
+        # prediction_scores.shape == max_seq_len x vocab_size x batch_size
+        prediction_scores = self.wrapper.model(**inputs)[0].permute(1, 2, 0)
+
+        # all_choice_token_ids.shape == batch_size x num_choices x max_seq_len
+        all_choice_token_ids = batch['choice_token_ids']
+        batch_size, num_choices, max_seq_len = all_choice_token_ids.shape
+
+        # all_candidate_labels.shape() == batch_size
+        all_labels = batch['labels']
+
+        # correct_choice_token_ids.shape == max_seq_len x batch_size
+        correct_choice_token_ids = all_choice_token_ids[torch.arange(batch_size), all_labels].permute(1, 0)
+
+        wrong_choices_mask = torch.ones_like(all_choice_token_ids)
+        wrong_choices_mask.scatter_(1, all_labels.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, max_seq_len), 0)
+        wrong_choices_token_ids = all_choice_token_ids[wrong_choices_mask.bool()].view(batch_size, num_choices - 1, max_seq_len)
+
+        # wrong_choices_token_ids.shape == (num_choices - 1) x max_seq_len x batch_size
+        wrong_choices_token_ids = wrong_choices_token_ids.permute(1, 2, 0)
+
+        total_loss = 0
+
+        # loss_correct_label.shape == batch_size
+        loss_correct_choice = loss_fct(prediction_scores, correct_choice_token_ids).sum(dim=0)
+
+        # compute hinge loss
+        for wrong_choice_token_ids in wrong_choices_token_ids:
+            loss_wrong_choice = loss_fct(prediction_scores, wrong_choice_token_ids).sum(dim=0)
+            hinge_loss = 1 + loss_correct_choice - loss_wrong_choice
+            hinge_loss[hinge_loss < 0] = 0
+            total_loss += hinge_loss
+
+        return total_loss.mean()
+
+    def eval_step(self, batch: Dict[str, torch.Tensor], batch_size: int = 8, decoding_strategy: str = 'default'):
+        if self.wrapper.config.wrapper_type == 'sequence_classifier':
+            return
+
+        assert self.wrapper.config.wrapper_type == 'mlm', 'eval_step() for MultiMaskTaskHelper is only implemented for MLM models'
+        assert batch['input_ids'].shape[0] == 1, "eval_step() for MultiMaskTaskHelper is only implemented for batch_size=1"
+
+        all_choice_token_ids = batch['choice_token_ids'][0]
+        log_probabilities = torch.tensor([[-math.inf] * len(all_choice_token_ids)], dtype=torch.float, device=all_choice_token_ids.device)
+
+        # group choices by length to speed up decoding
+        choices_grouped_by_length = defaultdict(list)
+
+        for idx, choice_token_ids in enumerate(all_choice_token_ids):
+            num_masks = sum(1 for x in choice_token_ids if x != -100)
+            choices_grouped_by_length[num_masks].append((idx, choice_token_ids))
+
+        input_ids = {}
+        initial_outputs = {}
+
+        for num_masks in choices_grouped_by_length.keys():
+            # modify the input ids to contain the correct number of masks
+            input_ids[num_masks] = trim_input_ids(batch['input_ids'], num_masks=num_masks,
+                                                  pad_token_id=self.wrapper.tokenizer.pad_token_id,
+                                                  mask_token_id=self.wrapper.tokenizer.mask_token_id)
+
+            initial_outputs[num_masks] = self.wrapper.model(input_ids[num_masks])
+
+        for num_masks, choices_with_labels in choices_grouped_by_length.items():
+
+            for batch in chunks(choices_with_labels, batch_size):
+                batch_input_ids = input_ids[num_masks].repeat(len(batch), 1)
+                choice_token_ids = torch.stack([choice_token_ids for idx, choice_token_ids in batch])
+
+                batch_probabilities = self._get_choice_probabilities_batched(choice_token_ids, batch_input_ids, initial_outputs[num_masks],
+                                                                             decoding_strategy=decoding_strategy)
+
+                for batch_idx, (idx, choice_token_ids) in enumerate(batch):
+                    log_probabilities[0][idx] = batch_probabilities[batch_idx]
+
+        return log_probabilities
+
+    def _get_choice_probabilities_batched(self, target_sequences, input_ids, initial_output, decoding_strategy):
+
+        log_probabilities = defaultdict(list)
+        first_call = True
+
+        while True:
+            masks = {batch_idx: [(idx, tok) for idx, tok in enumerate(target_sequences[batch_idx]) if tok >= 0] for
+                     batch_idx in range(len(target_sequences))}
+
+            if not masks[0]:  # there are no masks left to process, we are done
+                break
+
+            if first_call:
+                outputs = initial_output
+            else:
+                outputs = self.wrapper.model(input_ids)
+
+            next_token_logits = outputs[0]
+            next_token_logits = torch.nn.Softmax(dim=2)(next_token_logits)
+
+            if decoding_strategy == 'ltr':
+                masks = {batch_idx: [batch_masks[0]] for batch_idx, batch_masks in masks.items()}
+
+            for batch_idx in range(len(target_sequences)):
+
+                ntl = next_token_logits[batch_idx] if not first_call else next_token_logits[0]
+
+                if decoding_strategy == 'parallel':
+                    for m_pos, m_id in masks[batch_idx]:
+                        log_probabilities[batch_idx].append(math.log(ntl[m_pos][m_id].item()))
+                        target_sequences[batch_idx][m_pos] = -100
+
+                else:
+                    mask_pos, masked_id = None, None
+                    highest_prob = None
+                    for m_pos, m_id in masks[batch_idx]:
+                        m_prob = ntl[m_pos][m_id]
+                        if highest_prob is None or m_prob > highest_prob:
+                            highest_prob = m_prob
+                            mask_pos, masked_id = m_pos, m_id
+
+                    log_probabilities[batch_idx].append(math.log(ntl[mask_pos][masked_id].item()))
+                    input_ids[batch_idx][mask_pos] = masked_id
+                    target_sequences[batch_idx][mask_pos] = -100
+
+            first_call = False
+
+        return {batch_idx: sum(log_prob for log_prob in log_probabilities[batch_idx]) for batch_idx in
+                range(len(target_sequences))}
+
+    def add_special_input_features(self, input_example: InputExample, input_features: InputFeatures) -> None:
+        if self.wrapper.config.wrapper_type == 'sequence_classifier':
+            return
+
+        mask_start = input_features.input_ids.index(self.wrapper.tokenizer.mask_token_id)
+
+        if 'choices' in input_example.meta:
+            choices = [choice for choice in input_example.meta['choices']]
+        else:
+            label_list = self.wrapper.config.label_list
+            choices = [self.wrapper.preprocessor.pvp.verbalize(label)[0] for label in label_list]
+
+        input_features.meta['choice_token_ids'] = []
+
+        for idx, choice_text in enumerate(choices):
+            choice_token_ids = get_verbalization_ids(choice_text, self.wrapper.tokenizer, force_single_token=False)
+            mask_end = mask_start + len(choice_token_ids)
+            candidate_token_ids = [-100] * len(input_features.input_ids)
+            candidate_token_ids[mask_start:mask_end] = choice_token_ids
+            input_features.meta['choice_token_ids'].append(candidate_token_ids)
+
+    def add_features_to_dict(self, features: List[InputFeatures], feature_dict: Dict[str, torch.Tensor]) -> None:
+        if self.wrapper.config.wrapper_type == 'sequence_classifier':
+            return
+        
+        max_num_choices = max(len(f.meta['choice_token_ids']) for f in features)
+        for feature in features:
+            if len(feature.meta['choice_token_ids']) != max_num_choices:
+                raise ValueError(f"The number of output choices must be identical for all examples, got "
+                                 f"{len(feature.meta['choice_token_ids'])} and {max_num_choices}")
+
+        feature_dict['choice_token_ids'] = torch.tensor([f.meta['choice_token_ids'] for f in features], dtype=torch.long)
+
+
 class WicTaskHelper(TaskHelper):
     """A custom task helper for the WiC dataset."""
 

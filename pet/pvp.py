@@ -21,6 +21,9 @@ from typing import Tuple, List, Union, Dict
 
 import torch
 from transformers import PreTrainedTokenizer, GPT2Tokenizer
+
+from pet.task_helpers import MultiMaskTaskHelper
+from pet.tasks import TASK_HELPERS
 from pet.utils import InputExample, get_verbalization_ids
 
 import log
@@ -53,7 +56,8 @@ class PVP(ABC):
         if verbalizer_file:
             self.verbalize = PVP._load_verbalizer_from_file(verbalizer_file, self.pattern_id)
 
-        if self.wrapper.config.wrapper_type in [wrp.MLM_WRAPPER, wrp.PLM_WRAPPER]:
+        use_multimask = issubclass(TASK_HELPERS[self.wrapper.config.task_name], MultiMaskTaskHelper)
+        if not use_multimask and self.wrapper.config.wrapper_type in [wrp.MLM_WRAPPER, wrp.PLM_WRAPPER]:
             self.mlm_logits_to_cls_logits_tensor = self._build_mlm_logits_to_cls_logits_tensor()
 
     def _build_mlm_logits_to_cls_logits_tensor(self):

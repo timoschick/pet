@@ -218,7 +218,26 @@ def get_parts(self, example: InputExample):
 
 ### PET with Multiple Masks
 
-By default, the current implementation of PET and iPET only supports a fixed set of labels that is shared across all examples and verbalizers that correspond to a single token. If you want to use verbalizers that correspond to multiple tokens ([as described here](http://arxiv.org/abs/2009.07118)), you need to define a custom `TaskHelper` and add it to the `TASK_HELPERS` dictionary in `pet/tasks.py`. As a starting point, you can check out the classes `CopaTaskHelper`, `WscTaskHelper` and `RecordTaskHelper` in `pet/task_helpers.py`. In the next release of PET, using verbalizers with multiple masks will be enabled by default.
+By default, the current implementation of PET and iPET only supports a fixed set of labels that is shared across all examples and verbalizers that correspond to a single token. 
+However, for some tasks it may be necessary to use verbalizers that correspond to multiple tokens ([as described here](http://arxiv.org/abs/2009.07118)).
+To do so, you simply need to add the following lines in your task's **DataProcessor** (see `examples/custom_task_processor.py`):
+ 
+```python
+from pet.tasks import TASK_HELPERS
+from pet.task_helpers import MultiMaskTaskHelper
+TASK_HELPERS['my_task'] = MultiMaskTaskHelper
+```
+where ```'my_task'``` is the name of your task. With this modification, you can now use verbalizers consisting of multiple tokens:
+```python
+VERBALIZER = {"+1": ["really good"], "-1": ["just bad"]}
+```
+However, there are several limitations to consider:
+
+- When using a ``MultiMaskTaskHelper``, the maximum batch size for evaluation is 1.
+- As using multiple masks requires multiple forward passes during evaluation, the time required for evaluation scales about linearly with the length of the longest verbalizer. If you require verbalizers that consist of 10 or more tokens, [using a generative LM](https://arxiv.org/abs/2012.11926) might be a better approach.
+- The ``MultiMaskTaskHelper`` class is an experimental feature that is not thoroughly tested. In particular, this feature has only been tested for PET and not for iPET. If you observe something strange, please raise an issue.
+
+For more flexibility, you can also write a custom `TaskHelper`. As a starting point, you can check out the classes `CopaTaskHelper`, `WscTaskHelper` and `RecordTaskHelper` in `pet/task_helpers.py`.
 
 ## 📕 Citation
 

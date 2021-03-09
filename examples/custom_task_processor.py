@@ -20,7 +20,8 @@ import csv
 import os
 from typing import List
 
-from pet.tasks import DataProcessor, PROCESSORS
+from pet.task_helpers import MultiMaskTaskHelper
+from pet.tasks import DataProcessor, PROCESSORS, TASK_HELPERS
 from pet.utils import InputExample
 
 
@@ -111,3 +112,6 @@ class MyTaskDataProcessor(DataProcessor):
 
 # register the processor for this task with its name
 PROCESSORS[MyTaskDataProcessor.TASK_NAME] = MyTaskDataProcessor
+
+# optional: if you have to use verbalizers that correspond to multiple tokens, uncomment the following line
+# TASK_HELPERS[MyTaskDataProcessor.TASK_NAME] = MultiMaskTaskHelper
