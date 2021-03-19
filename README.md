@@ -220,14 +220,20 @@ def get_parts(self, example: InputExample):
 
 By default, the current implementation of PET and iPET only supports a fixed set of labels that is shared across all examples and verbalizers that correspond to a single token. 
 However, for some tasks it may be necessary to use verbalizers that correspond to multiple tokens ([as described here](http://arxiv.org/abs/2009.07118)).
-To do so, you simply need to add the following lines in your task's **DataProcessor** (see `examples/custom_task_processor.py`):
+To do so, you simply need the following two modifications:
+
+1) Add the following lines in your task's **DataProcessor** (see `examples/custom_task_processor.py`):
  
-```python
-from pet.tasks import TASK_HELPERS
-from pet.task_helpers import MultiMaskTaskHelper
-TASK_HELPERS['my_task'] = MultiMaskTaskHelper
-```
-where ```'my_task'``` is the name of your task. With this modification, you can now use verbalizers consisting of multiple tokens:
+   ```python
+   from pet.tasks import TASK_HELPERS
+   from pet.task_helpers import MultiMaskTaskHelper
+   TASK_HELPERS['my_task'] = MultiMaskTaskHelper
+   ```
+   where ```'my_task'``` is the name of your task. 
+
+2) In your **PVP**, make sure that the ``get_parts()`` method always inserts **the maximum number of mask tokens** required for any verbalization. For example, if your verbalizer maps ``+1`` to "really awesome" and ``-1`` to "terrible" and if those are tokenized as ``["really", "awe", "##some"]`` and ``["terrible"]``, respectively, your ``get_parts()`` method should always return a sequence that contains exactly 3 mask tokens.
+
+With this modification, you can now use verbalizers consisting of multiple tokens:
 ```python
 VERBALIZER = {"+1": ["really good"], "-1": ["just bad"]}
 ```
