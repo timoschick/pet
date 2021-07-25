@@ -21,40 +21,46 @@ from typing import Tuple
 
 import torch
 
+import pet.config
 from pet.tasks import PROCESSORS, load_examples, UNLABELED_SET, TRAIN_SET, DEV_SET, TEST_SET, METRICS, DEFAULT_METRICS
 from pet.utils import eq_div
-from pet.wrapper import WRAPPER_TYPES, MODEL_CLASSES, SEQUENCE_CLASSIFIER_WRAPPER, WrapperConfig
+from pet.wrapper import WRAPPER_TYPES, MODEL_CLASSES, SEQUENCE_CLASSIFIER_WRAPPER
+from pet.config import WrapperConfig
 import pet
 import log
 
 logger = log.get_logger('root')
 
 
-def load_pet_configs(args) -> Tuple[WrapperConfig, pet.TrainConfig, pet.EvalConfig]:
+def load_pet_configs(args) -> Tuple[WrapperConfig, pet.config.TrainConfig, pet.config.EvalConfig]:
     """
     Load the model, training and evaluation configs for PET from the given command line arguments.
     """
     model_cfg = WrapperConfig(model_type=args.model_type, model_name_or_path=args.model_name_or_path,
                               wrapper_type=args.wrapper_type, task_name=args.task_name, label_list=args.label_list,
                               max_seq_length=args.pet_max_seq_length, verbalizer_file=args.verbalizer_file,
-                              cache_dir=args.cache_dir)
+                              cache_dir=args.cache_dir, output_max_seq_length=args.output_max_seq_length,
+                              pattern_ids=args.pattern_ids)
 
-    train_cfg = pet.TrainConfig(device=args.device, per_gpu_train_batch_size=args.pet_per_gpu_train_batch_size,
-                                per_gpu_unlabeled_batch_size=args.pet_per_gpu_unlabeled_batch_size, n_gpu=args.n_gpu,
-                                num_train_epochs=args.pet_num_train_epochs, max_steps=args.pet_max_steps,
-                                gradient_accumulation_steps=args.pet_gradient_accumulation_steps,
-                                weight_decay=args.weight_decay, learning_rate=args.learning_rate,
-                                adam_epsilon=args.adam_epsilon, warmup_steps=args.warmup_steps,
-                                max_grad_norm=args.max_grad_norm, lm_training=args.lm_training, alpha=args.alpha)
+    train_cfg = pet.config.TrainConfig(device=args.device, per_gpu_train_batch_size=args.pet_per_gpu_train_batch_size,
+                                       per_gpu_unlabeled_batch_size=args.pet_per_gpu_unlabeled_batch_size,
+                                       n_gpu=args.n_gpu,
+                                       num_train_epochs=args.pet_num_train_epochs, max_steps=args.pet_max_steps,
+                                       gradient_accumulation_steps=args.pet_gradient_accumulation_steps,
+                                       weight_decay=args.weight_decay, learning_rate=args.learning_rate, optimizer=args.optimizer,
+                                       adam_epsilon=args.adam_epsilon, warmup_steps=args.warmup_steps,
+                                       max_grad_norm=args.max_grad_norm, lm_training=args.lm_training, alpha=args.alpha,
+                                       multi_pattern_training=args.multi_pattern_training,
+                                       epsilon=args.epsilon)
 
-    eval_cfg = pet.EvalConfig(device=args.device, n_gpu=args.n_gpu, metrics=args.metrics,
-                              per_gpu_eval_batch_size=args.pet_per_gpu_eval_batch_size,
-                              decoding_strategy=args.decoding_strategy, priming=args.priming)
+    eval_cfg = pet.config.EvalConfig(device=args.device, n_gpu=args.n_gpu, metrics=args.metrics,
+                                     per_gpu_eval_batch_size=args.pet_per_gpu_eval_batch_size,
+                                     decoding_strategy=args.decoding_strategy, priming=args.priming)
 
     return model_cfg, train_cfg, eval_cfg
 
 
-def load_sequence_classifier_configs(args) -> Tuple[WrapperConfig, pet.TrainConfig, pet.EvalConfig]:
+def load_sequence_classifier_configs(args) -> Tuple[WrapperConfig, pet.config.TrainConfig, pet.config.EvalConfig]:
     """
     Load the model, training and evaluation configs for a regular sequence classifier from the given command line
     arguments. This classifier can either be used as a standalone model or as the final classifier for PET/iPET.
@@ -62,29 +68,32 @@ def load_sequence_classifier_configs(args) -> Tuple[WrapperConfig, pet.TrainConf
     model_cfg = WrapperConfig(model_type=args.model_type, model_name_or_path=args.model_name_or_path,
                               wrapper_type=SEQUENCE_CLASSIFIER_WRAPPER, task_name=args.task_name,
                               label_list=args.label_list, max_seq_length=args.sc_max_seq_length,
-                              verbalizer_file=args.verbalizer_file, cache_dir=args.cache_dir)
+                              verbalizer_file=args.verbalizer_file, cache_dir=args.cache_dir,
+                              output_max_seq_length=args.output_max_seq_length)
 
-    train_cfg = pet.TrainConfig(device=args.device, per_gpu_train_batch_size=args.sc_per_gpu_train_batch_size,
-                                per_gpu_unlabeled_batch_size=args.sc_per_gpu_unlabeled_batch_size, n_gpu=args.n_gpu,
-                                num_train_epochs=args.sc_num_train_epochs, max_steps=args.sc_max_steps,
-                                temperature=args.temperature,
-                                gradient_accumulation_steps=args.sc_gradient_accumulation_steps,
-                                weight_decay=args.weight_decay, learning_rate=args.learning_rate,
-                                adam_epsilon=args.adam_epsilon, warmup_steps=args.warmup_steps,
-                                max_grad_norm=args.max_grad_norm, use_logits=args.method != 'sequence_classifier')
+    train_cfg = pet.config.TrainConfig(device=args.device, per_gpu_train_batch_size=args.sc_per_gpu_train_batch_size,
+                                       per_gpu_unlabeled_batch_size=args.sc_per_gpu_unlabeled_batch_size,
+                                       n_gpu=args.n_gpu,
+                                       num_train_epochs=args.sc_num_train_epochs, max_steps=args.sc_max_steps,
+                                       temperature=args.temperature, epsilon=args.epsilon,
+                                       gradient_accumulation_steps=args.sc_gradient_accumulation_steps,
+                                       weight_decay=args.weight_decay, learning_rate=args.learning_rate, optimizer=args.optimizer,
+                                       adam_epsilon=args.adam_epsilon, warmup_steps=args.warmup_steps,
+                                       max_grad_norm=args.max_grad_norm,
+                                       use_logits=args.method != 'sequence_classifier')
 
-    eval_cfg = pet.EvalConfig(device=args.device, n_gpu=args.n_gpu, metrics=args.metrics,
-                              per_gpu_eval_batch_size=args.sc_per_gpu_eval_batch_size)
+    eval_cfg = pet.config.EvalConfig(device=args.device, n_gpu=args.n_gpu, metrics=args.metrics,
+                                     per_gpu_eval_batch_size=args.sc_per_gpu_eval_batch_size)
 
     return model_cfg, train_cfg, eval_cfg
 
 
-def load_ipet_config(args) -> pet.IPetConfig:
+def load_ipet_config(args) -> pet.config.IPetConfig:
     """
     Load the iPET config from the given command line arguments.
     """
-    ipet_cfg = pet.IPetConfig(generations=args.ipet_generations, logits_percentage=args.ipet_logits_percentage,
-                              scale_factor=args.ipet_scale_factor, n_most_likely=args.ipet_n_most_likely)
+    ipet_cfg = pet.config.IPetConfig(generations=args.ipet_generations, logits_percentage=args.ipet_logits_percentage,
+                                     scale_factor=args.ipet_scale_factor, n_most_likely=args.ipet_n_most_likely)
     return ipet_cfg
 
 
@@ -104,6 +113,8 @@ def main():
                         help="The name of the task to train/evaluate on")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written")
+    parser.add_argument("--optimizer", default=None, required=True, choices=["adam", "adafactor"],
+                        help="The optimizer to use, either 'adam' or 'adafactor'.")
 
     # PET-specific optional parameters
     parser.add_argument("--wrapper_type", default="mlm", choices=WRAPPER_TYPES,
@@ -176,6 +187,31 @@ def main():
                         help="If >0, in the first generation the n_most_likely examples per label are chosen even "
                              "if their predicted label is different (only for iPET)")
 
+    # Optional parameters for generative models
+    parser.add_argument("--output_max_seq_length", default=256, type=int,
+                        help="The maximum number of output tokens to generate (only for generative models and tasks)")
+    parser.add_argument("--epsilon", type=float, default=0.1,
+                        help="The amount of label smoothing to use, from 0 to 1 (only for generative models and tasks)")
+    parser.add_argument("--multi_pattern_training", action='store_true',
+                        help="Whether to train a single model jointly on all PVPs (only for generative models and tasks)")
+    parser.add_argument("--untrained_model_scoring", action='store_true',
+                        help="Whether to use untrained models to score output candidates used for distillation instead of trained models "
+                             "(only for generative models and tasks)")
+    parser.add_argument("--cutoff_percentage", default=0, type=float,
+                        help="Of all generated outputs, the `cutoff_percentage`*100% outputs with the least probability are discarded for "
+                             "distillation (only for generative models and tasks)")
+    parser.add_argument("--samples_per_example", default=2, type=int,
+                        help="The number of times to sample an output for each input to generate the training set for distilling the final "
+                             "model (only for generative models and tasks)")
+    parser.add_argument("--uniform_sampling", action='store_true',
+                        help="Whether uniform sampling should be performed when generating the training set for distilling the final model "
+                             "instead of computing s(y|x) as defined in the paper (only for generative models and tasks)")
+    parser.add_argument("--no_decoder_prefix", action='store_true',
+                        help="If set, the decoder prefix is treated as part of the pattern and processed using the encoder (only for "
+                             "generative models and tasks)")
+    parser.add_argument("--final_pattern_id", default=1, type=int,
+                        help="The id of the pattern to be used for training the final model (only for generative models and tasks)")
+
     # Other optional parameters
     parser.add_argument("--train_examples", default=-1, type=int,
                         help="The total number of train examples to use, where -1 equals all examples.")
@@ -185,10 +221,13 @@ def main():
                         help="The total number of unlabeled examples to use, where -1 equals all examples")
     parser.add_argument("--split_examples_evenly", action='store_true',
                         help="If true, train examples are not chosen randomly, but split evenly across all labels.")
+    parser.add_argument("--take_first_examples", action='store_true',
+                        help="If true, examples are not chosen randomly, but the first k examples are chosen where "
+                             "k is one of --train_examples, --test_examples or --unlabeled_examples.")
     parser.add_argument("--cache_dir", default="", type=str,
                         help="Where to store the pre-trained models downloaded from S3.")
     parser.add_argument("--learning_rate", default=1e-5, type=float,
-                        help="The initial learning rate for Adam.")
+                        help="The initial learning rate for the optimizer.")
     parser.add_argument("--weight_decay", default=0.01, type=float,
                         help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
@@ -204,7 +243,10 @@ def main():
     parser.add_argument('--overwrite_output_dir', action='store_true',
                         help="Overwrite the content of the output directory")
     parser.add_argument('--seed', type=int, default=42,
-                        help="random seed for initialization")
+                        help="Random seed for model initialization")
+    parser.add_argument('--train_data_seed', type=int, default=42,
+                        help="A seed used only to select examples from the train set, if num_train_examples is less than the total "
+                             "examples and --take_first_examples is not set.")
     parser.add_argument('--do_train', action='store_true',
                         help="Whether to perform training")
     parser.add_argument('--do_eval', action='store_true',
@@ -242,11 +284,14 @@ def main():
     eval_set = TEST_SET if args.eval_set == 'test' else DEV_SET
 
     train_data = load_examples(
-        args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex, num_examples_per_label=train_ex_per_label)
+        args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex, num_examples_per_label=train_ex_per_label,
+        shuffle=not args.take_first_examples, seed=args.train_data_seed)
     eval_data = load_examples(
-        args.task_name, args.data_dir, eval_set, num_examples=test_ex, num_examples_per_label=test_ex_per_label)
+        args.task_name, args.data_dir, eval_set, num_examples=test_ex, num_examples_per_label=test_ex_per_label,
+        shuffle=not args.take_first_examples)
     unlabeled_data = load_examples(
-        args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples)
+        args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples,
+        shuffle=not args.take_first_examples)
 
     args.metrics = METRICS.get(args.task_name, DEFAULT_METRICS)
 
@@ -256,11 +301,12 @@ def main():
 
     if args.method == 'pet':
         pet.train_pet(pet_model_cfg, pet_train_cfg, pet_eval_cfg, sc_model_cfg, sc_train_cfg, sc_eval_cfg,
-                      pattern_ids=args.pattern_ids, output_dir=args.output_dir,
-                      ensemble_repetitions=args.pet_repetitions, final_repetitions=args.sc_repetitions,
-                      reduction=args.reduction, train_data=train_data, unlabeled_data=unlabeled_data,
-                      eval_data=eval_data, do_train=args.do_train, do_eval=args.do_eval,
-                      no_distillation=args.no_distillation, seed=args.seed)
+                      pattern_ids=args.pattern_ids, final_pattern_id=args.final_pattern_id, output_dir=args.output_dir,
+                      ensemble_repetitions=args.pet_repetitions, final_repetitions=args.sc_repetitions, reduction=args.reduction,
+                      train_data=train_data, unlabeled_data=unlabeled_data, eval_data=eval_data, do_train=args.do_train,
+                      do_eval=args.do_eval, no_distillation=args.no_distillation, untrained_model_scoring=args.untrained_model_scoring,
+                      samples_per_example=args.samples_per_example, cutoff_percentage=args.cutoff_percentage,
+                      uniform_sampling=args.uniform_sampling, no_decoder_prefix=args.no_decoder_prefix, seed=args.seed)
 
     elif args.method == 'ipet':
         pet.train_ipet(pet_model_cfg, pet_train_cfg, pet_eval_cfg, ipet_cfg, sc_model_cfg, sc_train_cfg, sc_eval_cfg,

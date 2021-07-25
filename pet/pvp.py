@@ -17,7 +17,7 @@ import random
 import string
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Tuple, List, Union, Dict
+from typing import Tuple, List, Union, Dict, Optional
 
 import torch
 from transformers import PreTrainedTokenizer, GPT2Tokenizer
@@ -255,6 +255,31 @@ class PVP(ABC):
             return verbalizers[pattern_id][label]
 
         return verbalize
+
+
+class GenerativePVP(PVP, ABC):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.no_decoder_prefix = False
+
+    @abstractmethod
+    def generative_prefix(self) -> Optional[str]:
+        """ Return the generative prefix for this pattern. """
+        pass
+
+    def generative_prefix_ids(self) -> List[int]:
+        if not self.generative_prefix() or self.no_decoder_prefix:
+            return []
+        try:
+            return self._generative_prefix_ids
+        except AttributeError:
+            self._generative_prefix_ids = self.wrapper.tokenizer.convert_tokens_to_ids(
+                self.wrapper.tokenizer.tokenize(self.generative_prefix()))
+            return self._generative_prefix_ids
+
+    def verbalize(self, label) -> List[str]:
+        return []
 
 
 class AgnewsPVP(PVP):
@@ -618,6 +643,69 @@ class RecordPVP(PVP):
         return []
 
 
+class SummarizationPVP(GenerativePVP, ABC):
+    def get_parts(self, example: InputExample) -> FilledPattern:
+        text_a = self.shortenable(example.text_a)
+        prefix = [self.generative_prefix()] if self.no_decoder_prefix and self.generative_prefix() else []
+
+        if self.pattern_id == 0:
+            return prefix + [text_a], []
+        elif self.pattern_id == 1:
+            return prefix + [self.mask, text_a], []
+        elif self.pattern_id in [2, 4]:
+            return prefix + [self.mask, text_a], []
+        elif self.pattern_id in [3, 5]:
+            return prefix + [self.mask, 'Text:', text_a], []
+
+
+class AeslcPVP(SummarizationPVP):
+    def generative_prefix(self) -> Optional[str]:
+        if self.pattern_id in [0, 1]:
+            return None
+        elif self.pattern_id in [2, 3]:
+            return 'E-Mail Subject:'
+        elif self.pattern_id in [4, 5]:
+            return 'E-Mail Topic:'
+
+
+class GigawordPVP(SummarizationPVP):
+    def generative_prefix(self) -> Optional[str]:
+        if self.pattern_id in [0, 1]:
+            return None
+        elif self.pattern_id in [2, 3]:
+            return 'Headline:'
+        elif self.pattern_id in [4, 5]:
+            return 'Article Headline:'
+
+
+class CnnDailymailPVP(SummarizationPVP):
+    def generative_prefix(self) -> Optional[str]:
+        if self.pattern_id in [0, 1]:
+            return None
+        elif self.pattern_id in [2, 3]:
+            return 'Highlights:'
+        elif self.pattern_id in [4, 5]:
+            return 'Article Highlights:'
+
+
+class XSumPVP(SummarizationPVP):
+    def generative_prefix(self) -> Optional[str]:
+        if self.pattern_id in [0, 1]:
+            return None
+        elif self.pattern_id in [2, 3]:
+            return 'Short Summary:'
+        elif self.pattern_id in [4, 5]:
+            return 'Brief Summary:'
+
+
+class RedditTifuPVP(XSumPVP):
+    pass
+
+
+class NewsroomPVP(XSumPVP):
+    pass
+
+
 PVPS = {
     'agnews': AgnewsPVP,
     'mnli': MnliPVP,
@@ -637,4 +725,11 @@ PVPS = {
     'record': RecordPVP,
     'ax-b': RtePVP,
     'ax-g': RtePVP,
+    'aeslc': AeslcPVP,
+    'xsum': XSumPVP,
+    'gigaword': GigawordPVP,
+    'reddit-tifu': RedditTifuPVP,
+    'cnn-dailymail': CnnDailymailPVP,
+    'newsroom': NewsroomPVP,
+    'tf-newsroom': NewsroomPVP,
 }

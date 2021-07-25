@@ -11,12 +11,12 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
-from pet.utils import InputFeatures, InputExample, PLMInputFeatures
-from pet.pvp import PVP, PVPS
+from pet.utils import InputFeatures, InputExample, PLMInputFeatures, GenerativeInputFeatures, GenerativeInputExample
+from pet.pvp import PVPS, PVP
 
 
 class Preprocessor(ABC):
@@ -25,21 +25,22 @@ class Preprocessor(ABC):
     processed by the model being used.
     """
 
-    def __init__(self, wrapper, task_name, pattern_id: int = 0, verbalizer_file: str = None):
+    def __init__(self, wrapper, task_name: str, pattern_ids: Optional[List[int]] = None, verbalizer_file: str = None):
         """
         Create a new preprocessor.
 
         :param wrapper: the wrapper for the language model to use
         :param task_name: the name of the task
-        :param pattern_id: the id of the PVP to be used
+        :param pattern_ids: the ids of the PVPs to be used
         :param verbalizer_file: path to a file containing a verbalizer that overrides the default verbalizer
         """
         self.wrapper = wrapper
-        self.pvp = PVPS[task_name](self.wrapper, pattern_id, verbalizer_file)  # type: PVP
+        if pattern_ids is not None:
+            self.pvps = {pid: PVPS[task_name](self.wrapper, pid, verbalizer_file) for pid in pattern_ids}
         self.label_map = {label: i for i, label in enumerate(self.wrapper.config.label_list)}
 
     @abstractmethod
-    def get_input_features(self, example: InputExample, labelled: bool, priming: bool = False,
+    def get_input_features(self, example: InputExample, pattern_id: int, labelled: bool, priming: bool = False,
                            **kwargs) -> InputFeatures:
         """Convert the given example into a set of input features"""
         pass
@@ -48,23 +49,29 @@ class Preprocessor(ABC):
 class MLMPreprocessor(Preprocessor):
     """Preprocessor for models pretrained using a masked language modeling objective (e.g., BERT)."""
 
-    def get_input_features(self, example: InputExample, labelled: bool, priming: bool = False,
+    def get_input_features(self, example: InputExample, pattern_id: int, labelled: bool, priming: bool = False,
                            **kwargs) -> InputFeatures:
 
+        pvp = self.pvps[pattern_id]  # type: PVP
+
         if priming:
-            input_ids, token_type_ids = self.pvp.encode(example, priming=True)
+            input_ids, token_type_ids = pvp.encode(example, priming=True)
             priming_data = example.meta['priming_data']  # type: List[InputExample]
 
             priming_input_ids = []
             for priming_example in priming_data:
-                pe_input_ids, _ = self.pvp.encode(priming_example, priming=True, labeled=True)
+                pe_input_ids, _ = pvp.encode(priming_example, priming=True, labeled=True)
                 priming_input_ids += pe_input_ids
 
             input_ids = priming_input_ids + input_ids
             token_type_ids = self.wrapper.tokenizer.create_token_type_ids_from_sequences(input_ids)
             input_ids = self.wrapper.tokenizer.build_inputs_with_special_tokens(input_ids)
         else:
-            input_ids, token_type_ids = self.pvp.encode(example)
+            input_ids, token_type_ids = pvp.encode(example)
+
+        if self.wrapper.config.model_type == 'pegasus':
+            # bugfix: Transformers' create_token_type_ids_from_sequences seems to ignore the final </s> token in Pegasus
+            token_type_ids += [0]
 
         attention_mask = [1] * len(input_ids)
         padding_length = self.wrapper.config.max_seq_length - len(input_ids)
@@ -84,7 +91,7 @@ class MLMPreprocessor(Preprocessor):
         logits = example.logits if example.logits else [-1]
 
         if labelled:
-            mlm_labels = self.pvp.get_mask_positions(input_ids)
+            mlm_labels = pvp.get_mask_positions(input_ids)
             if self.wrapper.config.model_type == 'gpt2':
                 # shift labels to the left by one
                 mlm_labels.append(mlm_labels.pop(0))
@@ -92,27 +99,71 @@ class MLMPreprocessor(Preprocessor):
             mlm_labels = [-1] * self.wrapper.config.max_seq_length
 
         return InputFeatures(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,
-                             label=label, mlm_labels=mlm_labels, logits=logits, idx=example.idx)
+                             label=label, mlm_labels=mlm_labels, logits=logits, idx=example.idx, pattern_id=pattern_id)
 
 
 class PLMPreprocessor(MLMPreprocessor):
     """Preprocessor for models pretrained using a permuted language modeling objective (e.g., XLNet)."""
 
-    def get_input_features(self, example: InputExample, labelled: bool, priming: bool = False,
+    def get_input_features(self, example: InputExample, pattern_id: int, labelled: bool, priming: bool = False,
                            **kwargs) -> PLMInputFeatures:
-        input_features = super().get_input_features(example, labelled, priming, **kwargs)
+        input_features = super().get_input_features(example, pattern_id, labelled=labelled, priming=priming, **kwargs)
         input_ids = input_features.input_ids
+        pvp = self.pvps[pattern_id]  # type: PVP
 
         num_masks = 1  # currently, PLMPreprocessor supports only replacements that require exactly one mask
 
         perm_mask = np.zeros((len(input_ids), len(input_ids)), dtype=np.float)
-        label_idx = input_ids.index(self.pvp.mask_id)
+        label_idx = input_ids.index(pvp.mask_id)
         perm_mask[:, label_idx] = 1  # the masked token is not seen by any other token
 
         target_mapping = np.zeros((num_masks, len(input_ids)), dtype=np.float)
         target_mapping[0, label_idx] = 1.0
 
         return PLMInputFeatures(perm_mask=perm_mask, target_mapping=target_mapping, **input_features.__dict__)
+
+
+class GenerativePreprocessor(MLMPreprocessor):
+    """Preprocessor for a generative language model and generative task."""
+
+    def get_input_features(self, example: InputExample, pattern_id: int, labelled: bool, priming: bool = False,
+                           **kwargs) -> GenerativeInputFeatures:
+        input_features = super().get_input_features(example, pattern_id, labelled=False, priming=False, **kwargs)
+
+        assert isinstance(example, GenerativeInputExample)
+
+        if example.output_text is not None:
+
+            generative_prefix = self.pvps[pattern_id].generative_prefix_ids()
+            max_length = self.wrapper.config.output_max_seq_length - len(generative_prefix)
+
+            output_ids = self.wrapper.tokenizer.encode(example.output_text, add_special_tokens=True,
+                                                       max_length=max_length, padding='max_length',
+                                                       truncation='only_first')
+            pad_token = self.wrapper.tokenizer.pad_token_id
+            output_loss_mask = [0] * len(generative_prefix) + [0 if tok_id == pad_token else 1 for tok_id in output_ids]
+            output_ids = generative_prefix + output_ids
+        else:
+            output_ids = [self.wrapper.tokenizer.pad_token_id]
+            output_loss_mask = [0]
+
+        if 'token_ids' in example.meta:
+            token_ids = example.meta['token_ids']
+            token_probabilities = example.meta['token_probabilities']
+            len_output_ids = sum(1 for x in output_ids if x != self.wrapper.tokenizer.pad_token_id)
+
+            assert len(token_ids) == len_output_ids, \
+                f"If given, there should be as many token ids as there are output ids. Got {len(token_ids)} token " \
+                f"ids and {len_output_ids} output ids."
+
+            padding_entry = [0] * len(token_ids[0])
+            padding = [padding_entry] * (self.wrapper.config.output_max_seq_length - len(token_ids))
+
+            input_features.meta['token_ids'] = token_ids + padding
+            input_features.meta['token_probabilities'] = token_probabilities + padding
+
+        return GenerativeInputFeatures(output_ids=output_ids, output_loss_mask=output_loss_mask,
+                                       **input_features.__dict__)
 
 
 class SequenceClassifierPreprocessor(Preprocessor):

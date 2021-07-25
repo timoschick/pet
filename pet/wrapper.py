@@ -14,6 +14,7 @@
 This file contains code for wrapping a transformer language model and
 provides convenience methods for training and inference.
 """
+import copy
 import json
 import jsonpickle
 import os
@@ -24,18 +25,22 @@ import torch.nn as nn
 import numpy as np
 from torch.utils.data import RandomSampler, DataLoader, SequentialSampler
 from tqdm import trange, tqdm
-from transformers import InputExample, AdamW, get_linear_schedule_with_warmup, PreTrainedTokenizer, BertForMaskedLM, \
+from transformers import AdamW, get_linear_schedule_with_warmup, PreTrainedTokenizer, BertForMaskedLM, \
     RobertaForMaskedLM, XLMRobertaForMaskedLM, XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer, \
     XLNetLMHeadModel, BertConfig, BertForSequenceClassification, BertTokenizer, RobertaConfig, \
     RobertaForSequenceClassification, RobertaTokenizer, XLMRobertaConfig, XLMRobertaForSequenceClassification, \
     XLMRobertaTokenizer, AlbertForSequenceClassification, AlbertForMaskedLM, AlbertTokenizer, AlbertConfig, \
-    GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
+    GPT2Config, GPT2LMHeadModel, GPT2Tokenizer, PegasusConfig, PegasusTokenizer, Adafactor
 from transformers import __version__ as transformers_version
 
 import log
 from pet import preprocessor
+from pet.config import WrapperConfig
+from pet.modeling_pegasus import PetPegasusForConditionalGeneration
+from pet.pvp import GenerativePVP
 from pet.tasks import TASK_HELPERS
-from pet.utils import InputFeatures, DictDataset, distillation_loss
+from pet.utils import InputExample, InputFeatures, DictDataset, distillation_loss, \
+    get_sqrt_schedule_with_warmup, GenerativeInputExample, LabelSmoothingLoss
 
 logger = log.get_logger('root')
 
@@ -43,13 +48,15 @@ CONFIG_NAME = 'wrapper_config.json'
 SEQUENCE_CLASSIFIER_WRAPPER = "sequence_classifier"
 MLM_WRAPPER = "mlm"
 PLM_WRAPPER = "plm"
+GENERATIVE_WRAPPER = "generative"
 
-WRAPPER_TYPES = [SEQUENCE_CLASSIFIER_WRAPPER, MLM_WRAPPER, PLM_WRAPPER]
+WRAPPER_TYPES = [SEQUENCE_CLASSIFIER_WRAPPER, MLM_WRAPPER, PLM_WRAPPER, GENERATIVE_WRAPPER]
 
 PREPROCESSORS = {
     SEQUENCE_CLASSIFIER_WRAPPER: preprocessor.SequenceClassifierPreprocessor,
     MLM_WRAPPER: preprocessor.MLMPreprocessor,
     PLM_WRAPPER: preprocessor.PLMPreprocessor,
+    GENERATIVE_WRAPPER: preprocessor.GenerativePreprocessor,
 }
 
 MODEL_CLASSES = {
@@ -88,6 +95,11 @@ MODEL_CLASSES = {
         'tokenizer': GPT2Tokenizer,
         MLM_WRAPPER: GPT2LMHeadModel
     },
+    'pegasus': {
+        'config': PegasusConfig,
+        'tokenizer': PegasusTokenizer,
+        GENERATIVE_WRAPPER: PetPegasusForConditionalGeneration
+    }
 }
 
 EVALUATION_STEP_FUNCTIONS = {
@@ -100,36 +112,10 @@ TRAIN_STEP_FUNCTIONS = {
     MLM_WRAPPER: lambda wrapper: wrapper.mlm_train_step,
     PLM_WRAPPER: lambda wrapper: wrapper.plm_train_step,
     SEQUENCE_CLASSIFIER_WRAPPER: lambda wrapper: wrapper.sequence_classifier_train_step,
+    GENERATIVE_WRAPPER: lambda wrapper: wrapper.generative_train_step,
 }
 
-
-class WrapperConfig(object):
-    """A configuration for a :class:`TransformerModelWrapper`."""
-
-    def __init__(self, model_type: str, model_name_or_path: str, wrapper_type: str, task_name: str, max_seq_length: int,
-                 label_list: List[str], pattern_id: int = 0, verbalizer_file: str = None, cache_dir: str = None):
-        """
-        Create a new config.
-
-        :param model_type: the model type (e.g., 'bert', 'roberta', 'albert')
-        :param model_name_or_path: the model name (e.g., 'roberta-large') or path to a pretrained model
-        :param wrapper_type: the wrapper type (one of 'mlm', 'plm' and 'sequence_classifier')
-        :param task_name: the task to solve
-        :param max_seq_length: the maximum number of tokens in a sequence
-        :param label_list: the list of labels for the task
-        :param pattern_id: the id of the pattern to use
-        :param verbalizer_file: optional path to a verbalizer file
-        :param cache_dir: optional path to a cache dir
-        """
-        self.model_type = model_type
-        self.model_name_or_path = model_name_or_path
-        self.wrapper_type = wrapper_type
-        self.task_name = task_name
-        self.max_seq_length = max_seq_length
-        self.label_list = label_list
-        self.pattern_id = pattern_id
-        self.verbalizer_file = verbalizer_file
-        self.cache_dir = cache_dir
+PEGASUS_MASK_SENTENCE_TOKEN_ID = 2
 
 
 class TransformerModelWrapper:
@@ -143,12 +129,17 @@ class TransformerModelWrapper:
         model_class = MODEL_CLASSES[self.config.model_type][self.config.wrapper_type]
 
         model_config = config_class.from_pretrained(
-            config.model_name_or_path, num_labels=len(config.label_list), finetuning_task=config.task_name,
-            cache_dir=config.cache_dir if config.cache_dir else None, use_cache=False)
+            config.model_name_or_path, num_labels=len(config.label_list),
+            cache_dir=config.cache_dir if config.cache_dir else None)
 
         self.tokenizer = tokenizer_class.from_pretrained(
             config.model_name_or_path,
             cache_dir=config.cache_dir if config.cache_dir else None)  # type: PreTrainedTokenizer
+
+        if self.config.model_type == 'pegasus':
+            self.tokenizer.add_special_tokens(
+                {'mask_token': self.tokenizer.convert_ids_to_tokens(PEGASUS_MASK_SENTENCE_TOKEN_ID)}
+            )
 
         if self.config.model_type == 'gpt2':
             self.tokenizer.pad_token, self.tokenizer.mask_token = self.tokenizer.eos_token, self.tokenizer.eos_token
@@ -156,7 +147,7 @@ class TransformerModelWrapper:
         self.model = model_class.from_pretrained(config.model_name_or_path, config=model_config,
                                                  cache_dir=config.cache_dir if config.cache_dir else None)
 
-        self.preprocessor = PREPROCESSORS[self.config.wrapper_type](self, self.config.task_name, self.config.pattern_id,
+        self.preprocessor = PREPROCESSORS[self.config.wrapper_type](self, self.config.task_name, self.config.pattern_ids,
                                                                     self.config.verbalizer_file)
         self.task_helper = TASK_HELPERS[self.config.task_name](self) if self.config.task_name in TASK_HELPERS else None
 
@@ -170,7 +161,7 @@ class TransformerModelWrapper:
         wrapper.model = model_class.from_pretrained(path)
         wrapper.tokenizer = tokenizer_class.from_pretrained(path)
         wrapper.preprocessor = PREPROCESSORS[wrapper.config.wrapper_type](
-            wrapper, wrapper.config.task_name, wrapper.config.pattern_id, wrapper.config.verbalizer_file)
+            wrapper, wrapper.config.task_name, wrapper.config.pattern_ids, wrapper.config.verbalizer_file)
         wrapper.task_helper = TASK_HELPERS[wrapper.config.task_name](wrapper) \
             if wrapper.config.task_name in TASK_HELPERS else None
         return wrapper
@@ -193,10 +184,10 @@ class TransformerModelWrapper:
 
     def train(self, task_train_data: List[InputExample], device, per_gpu_train_batch_size: int = 8, n_gpu: int = 1,
               num_train_epochs: int = 3, gradient_accumulation_steps: int = 1, weight_decay: float = 0.0,
-              learning_rate: float = 5e-5, adam_epsilon: float = 1e-8, warmup_steps=0, max_grad_norm: float = 1,
+              learning_rate: float = 5e-5, optimizer: str = "adam", adam_epsilon: float = 1e-8, warmup_steps=0, max_grad_norm: float = 1,
               logging_steps: int = 50, per_gpu_unlabeled_batch_size: int = 8, unlabeled_data: List[InputExample] = None,
               lm_training: bool = False, use_logits: bool = False, alpha: float = 0.8, temperature: float = 1,
-              max_steps=-1, **_):
+              epsilon: float = 0.1, max_steps: int = -1, **_):
         """
         Train the underlying language model.
 
@@ -208,6 +199,7 @@ class TransformerModelWrapper:
         :param gradient_accumulation_steps: the number of gradient accumulation steps before performing an update
         :param weight_decay: the weight decay to use
         :param learning_rate: the learning rate to use
+        :param optimizer: the optimizer to use (supported optimizers are 'adam' and 'adafactor')
         :param adam_epsilon: epsilon parameter for the Adam optimizer
         :param warmup_steps: the number of warmup steps
         :param max_grad_norm: the maximum norm for the gradient
@@ -218,14 +210,19 @@ class TransformerModelWrapper:
         :param use_logits: whether to use the example's logits instead of their labels to compute the loss
         :param alpha: the alpha parameter for auxiliary language modeling
         :param temperature: the temperature for knowledge distillation
+        :param epsilon: the amount of label smoothing to use, between 0 and 1
         :param max_steps: the maximum number of training steps, overrides ``num_train_epochs``
         :return: a tuple consisting of the total number of steps and the average training loss
         """
 
         train_batch_size = per_gpu_train_batch_size * max(1, n_gpu)
-        train_dataset = self._generate_dataset(task_train_data)
-        train_sampler = RandomSampler(train_dataset)
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=train_batch_size)
+
+        if not task_train_data:
+            train_dataloader = None
+        else:
+            train_dataset = self._generate_dataset(task_train_data, pattern_ids=self.config.pattern_ids)
+            train_sampler = RandomSampler(train_dataset)
+            train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=train_batch_size)
 
         unlabeled_dataloader, unlabeled_iter = None, None
 
@@ -233,7 +230,7 @@ class TransformerModelWrapper:
             # we need unlabeled data both for auxiliary language modeling and for knowledge distillation
             assert unlabeled_data is not None
             unlabeled_batch_size = per_gpu_unlabeled_batch_size * max(1, n_gpu)
-            unlabeled_dataset = self._generate_dataset(unlabeled_data, labelled=False)
+            unlabeled_dataset = self._generate_dataset(unlabeled_data, pattern_ids=self.config.pattern_ids, labelled=False)
             unlabeled_sampler = RandomSampler(unlabeled_dataset)
             unlabeled_dataloader = DataLoader(unlabeled_dataset, sampler=unlabeled_sampler,
                                               batch_size=unlabeled_batch_size)
@@ -257,15 +254,21 @@ class TransformerModelWrapper:
              'weight_decay': 0.0}
         ]
 
-        optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps,
-                                                    num_training_steps=t_total)
+        if optimizer == 'adafactor':
+            optimizer = Adafactor(self.model.parameters(), lr=learning_rate, relative_step=False, scale_parameter=False)
+            scheduler = get_sqrt_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
+        elif optimizer == 'adam':
+            optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps=adam_epsilon)
+            scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
+        else:
+            raise ValueError(f"Unknown optimizer choice: '{optimizer}'")
 
         # multi-gpu training
         if n_gpu > 1:
             self.model = torch.nn.DataParallel(self.model)
 
-        step = 0
+        self.model.to(device)
+
         global_step = 0
         tr_loss, logging_loss = 0.0, 0.0
         self.model.zero_grad()
@@ -274,7 +277,7 @@ class TransformerModelWrapper:
 
         for _ in train_iterator:
             epoch_iterator = tqdm(train_dataloader, desc="Iteration")
-            for _, batch in enumerate(epoch_iterator):
+            for step, batch in enumerate(epoch_iterator):
                 self.model.train()
                 unlabeled_batch = None
 
@@ -294,7 +297,7 @@ class TransformerModelWrapper:
 
                 train_step_inputs = {
                     'unlabeled_batch': unlabeled_batch, 'lm_training': lm_training, 'alpha': alpha,
-                    'use_logits': use_logits, 'temperature': temperature
+                    'use_logits': use_logits, 'temperature': temperature, 'epsilon': epsilon,
                 }
                 loss = self.task_helper.train_step(batch, **train_step_inputs) if self.task_helper else None
 
@@ -312,15 +315,17 @@ class TransformerModelWrapper:
                 if (step + 1) % gradient_accumulation_steps == 0:
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
                     optimizer.step()
-                    scheduler.step()
+                    if scheduler:
+                        scheduler.step()
                     self.model.zero_grad()
                     global_step += 1
 
                     if logging_steps > 0 and global_step % logging_steps == 0:
                         logs = {}
                         loss_scalar = (tr_loss - logging_loss) / logging_steps
-                        learning_rate_scalar = scheduler.get_lr()[0]
-                        logs['learning_rate'] = learning_rate_scalar
+                        if scheduler:
+                            learning_rate_scalar = scheduler.get_lr()[0]
+                            logs['learning_rate'] = learning_rate_scalar
                         logs['loss'] = loss_scalar
                         logging_loss = tr_loss
 
@@ -329,7 +334,6 @@ class TransformerModelWrapper:
                 if 0 < max_steps < global_step:
                     epoch_iterator.close()
                     break
-                step += 1
             if 0 < max_steps < global_step:
                 train_iterator.close()
                 break
@@ -337,7 +341,7 @@ class TransformerModelWrapper:
         return global_step, (tr_loss / global_step if global_step > 0 else -1)
 
     def eval(self, eval_data: List[InputExample], device, per_gpu_eval_batch_size: int = 8, n_gpu: int = 1,
-             priming: bool = False, decoding_strategy: str = 'default') -> Dict:
+             priming: bool = False, decoding_strategy: str = 'default', pattern_id: Optional[int] = None) -> Dict:
         """
         Evaluate the underlying language model.
 
@@ -347,17 +351,23 @@ class TransformerModelWrapper:
         :param n_gpu: the number of gpus to use
         :param priming: whether to use priming
         :param decoding_strategy: the decoding strategy for PET with multiple masks ('default', 'ltr' or 'parallel')
+        :param pattern_id: the id of the pattern to be used
         :return: a dictionary of numpy arrays containing the indices, logits, labels, and (optional) question_ids for
                  each evaluation example.
         """
 
-        eval_dataset = self._generate_dataset(eval_data, priming=priming)
+        assert pattern_id is not None or len(self.config.pattern_ids) == 1
+        pattern_ids = [pattern_id] if pattern_id is not None else [self.config.pattern_ids[0]]
+
+        eval_dataset = self._generate_dataset(eval_data, pattern_ids=pattern_ids, priming=priming)
         eval_batch_size = per_gpu_eval_batch_size * max(1, n_gpu)
         eval_sampler = SequentialSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=eval_batch_size)
 
         if n_gpu > 1:
             self.model = torch.nn.DataParallel(self.model)
+
+        self.model.to(device)
 
         preds = None
         all_indices, out_label_ids, question_ids = None, None, None
@@ -397,8 +407,163 @@ class TransformerModelWrapper:
             'question_ids': question_ids
         }
 
-    def _generate_dataset(self, data: List[InputExample], labelled: bool = True, priming: bool = False):
-        features = self._convert_examples_to_features(data, labelled=labelled, priming=priming)
+    def get_sequence_log_probabilities(self, eval_data: List[GenerativeInputExample], device, pattern_id: int,
+                                       per_gpu_eval_batch_size: int = 8, n_gpu: int = 1):
+        """
+        Compute the log probabilities for a list of input examples.
+        :param eval_data: the evaluation examples to use
+        :param device: the evaluation device (cpu/gpu)
+        :param pattern_id: the id of the pattern to use for computing log probabilities
+        :param per_gpu_eval_batch_size: the number of evaluation examples per batch and gpu
+        :param n_gpu: the number of gpus to use
+        :return: a list of log probabilities, where the `i`th probability corresponds to the `i`th input
+        """
+        eval_dataset = self._generate_dataset(eval_data, pattern_ids=[pattern_id])
+        eval_batch_size = per_gpu_eval_batch_size * max(1, n_gpu)
+        eval_sampler = SequentialSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=eval_batch_size)
+
+        model = self.model.module if hasattr(self.model, 'module') else self.model
+        model.to(device)
+
+        output_log_probabilities = []
+
+        assert all(isinstance(pvp, GenerativePVP) for pvp in self.preprocessor.pvps.values())
+
+        for batch in tqdm(eval_dataloader, desc="Evaluating"):
+            model.eval()
+
+            output_prefix_ids = self.preprocessor.pvps[pattern_id].generative_prefix_ids()
+
+            output_prefix_ids = torch.tensor([output_prefix_ids], dtype=torch.long) \
+                .repeat(batch['output_ids'].shape[0], 1)
+
+            batch = {
+                'input_ids': batch['input_ids'],
+                'attention_mask': batch['attention_mask'],
+                'labels': torch.cat([output_prefix_ids, batch['output_ids']], dim=1)
+            }
+
+            labels = batch['labels']
+            first_token_tensor = torch.tensor(
+                [[self.tokenizer.pad_token_id]], device=labels.device
+            ).repeat(labels.shape[0], 1)
+            batch['decoder_input_ids'] = torch.cat([first_token_tensor, labels], dim=1)[:, :-1]
+
+            batch = {k: t.to(device) for k, t in batch.items()}
+
+            with torch.no_grad():
+                logits = model(**batch)[1]
+                log_probs = self._compute_log_probs(logits, batch, ignore_first=output_prefix_ids.shape[1])
+                output_log_probabilities.extend(log_probs.tolist())
+
+        return output_log_probabilities
+
+    def _compute_log_probs(self, logits, batch, ignore_first: int = 0):
+        """
+        Compute the log probability of each element in the batch.
+        :param logits: the logits for each example in the batch
+        :param batch: the batch, with required fields 'input_ids', 'attention_mask' and 'labels'
+        :param ignore_first: if set to a value > 0, the first `ignore_first` tokens are masked out for loss computation
+        :return: a list of log probabilities, where the `i`th probability corresponds to example `i` in the batch
+        """
+        if ignore_first > 0:
+            labels = batch['labels']
+            mask = torch.tensor([0] * ignore_first + [1] * (labels.shape[1] - ignore_first)).to(labels.device)
+            batch['labels'] = labels * mask + self.tokenizer.pad_token_id * (1 - mask)
+
+        loss_fct = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id, reduction='none')
+        loss = loss_fct(logits.permute([1, 2, 0]), batch['labels'].permute([1, 0]))
+        loss = loss.permute([1, 0])
+
+        num_tokens = (batch['labels'] != self.tokenizer.pad_token_id).sum(dim=1)
+        assert not any(num_tokens == 0)
+
+        avg_loss = loss.sum(dim=1)
+        return -avg_loss
+
+    def generate_new_examples(self, gen_data: List[GenerativeInputExample], device, pattern_id: int, per_gpu_batch_size: int = 8,
+                              n_gpu: int = 1):
+        outputs = self.generate(gen_data, device, pattern_id=pattern_id, per_gpu_eval_batch_size=per_gpu_batch_size, n_gpu=n_gpu)
+        new_examples = []
+        for example, prediction in zip(gen_data, outputs['predictions']):
+            new_example = copy.deepcopy(example)
+            new_example.output_text = prediction
+            try:
+                new_example.output_text = prediction[:prediction.rindex('.') + 1]
+            except ValueError:
+                # text does not contain a full stop, continue
+                pass
+            new_examples.append(new_example)
+        return new_examples
+
+    def generate(self, eval_data: List[InputExample], device, pattern_id: int = None, pattern_ids: List[int] = None,
+                 per_gpu_eval_batch_size: int = 8, n_gpu: int = 1, joint_decoding: bool = True, flatten: bool = True):
+
+        assert (pattern_id is not None) ^ (pattern_ids is not None), "Exactly one of 'pattern_id' and 'pattern_ids' must be given"
+        if pattern_id is not None:
+            pattern_ids = [pattern_id]
+
+        if not joint_decoding and flatten:
+            raise ValueError("`flatten` must be set to False if no joint decoding is performed.")
+
+        if per_gpu_eval_batch_size % len(pattern_ids) != 0:
+            logger.warning(f"Batch size ({per_gpu_eval_batch_size}) must be a multiple of the number of patterns ({len(pattern_ids)})")
+            per_gpu_eval_batch_size = max(1, per_gpu_eval_batch_size // len(pattern_ids)) * len(pattern_ids)
+            logger.warning(f"Setting batch size to {per_gpu_eval_batch_size}")
+
+        eval_dataset = self._generate_dataset(eval_data, pattern_ids=pattern_ids)
+        eval_batch_size = per_gpu_eval_batch_size * max(1, n_gpu)
+        eval_sampler = SequentialSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=eval_batch_size)
+
+        model = self.model.module if hasattr(self.model, 'module') else self.model
+        model.to(device)
+
+        indices = [example.idx for example in eval_data]
+        output_texts = []
+
+        assert all(isinstance(pvp, GenerativePVP) for pvp in self.preprocessor.pvps.values())
+        output_prefix_ids = [self.preprocessor.pvps[pattern_id].generative_prefix_ids() for pattern_id in pattern_ids]
+
+        for batch in tqdm(eval_dataloader, desc="Evaluating"):
+            model.eval()
+            batch = {k: t.to(device) for k, t in batch.items()}
+
+            with torch.no_grad():
+                grouped_output_ids = model.generate(**batch, num_beams=1, max_length=self.config.output_max_seq_length,
+                                                    output_prefix_ids=output_prefix_ids, joint_decoding=joint_decoding)
+
+                processed_output_ids = []
+
+                for all_output_ids_for_input in grouped_output_ids:
+                    assert len(all_output_ids_for_input) == len(output_prefix_ids)
+                    all_output_ids_for_input = [output_ids[len(output_prefix_ids[pattern_idx]) + 1:] for pattern_idx, output_ids in
+                                                enumerate(all_output_ids_for_input)]
+
+                    if joint_decoding:
+                        assert len(set(tuple(output_ids.tolist()) for output_ids in all_output_ids_for_input)) == 1
+                        all_output_ids_for_input = all_output_ids_for_input[:1]
+
+                    processed_output_ids.append(all_output_ids_for_input)
+
+                tgt_texts = [self.tokenizer.batch_decode(output_ids, skip_special_tokens=True) for output_ids in processed_output_ids]
+                tgt_texts = [[text.replace('<n>', ' ') for text in texts] for texts in tgt_texts]
+
+                if flatten:
+                    assert all(len(text_list) == 1 for text_list in tgt_texts)
+                    tgt_texts = [texts[0] for texts in tgt_texts]
+
+                output_texts.extend(tgt_texts)
+
+        return {
+            'predictions': output_texts,
+            'indices': indices
+        }
+
+    def _generate_dataset(self, data: List[InputExample], pattern_ids: List[int], labelled: bool = True,
+                          priming: bool = False) -> DictDataset:
+        features = self._convert_examples_to_features(data, pattern_ids=pattern_ids, labelled=labelled, priming=priming)
         feature_dict = {
             'input_ids': torch.tensor([f.input_ids for f in features], dtype=torch.long),
             'attention_mask': torch.tensor([f.attention_mask for f in features], dtype=torch.long),
@@ -412,24 +577,33 @@ class TransformerModelWrapper:
             feature_dict['perm_mask'] = torch.tensor([f.perm_mask for f in features], dtype=torch.float)
             feature_dict['target_mapping'] = torch.tensor([f.target_mapping for f in features], dtype=torch.float)
 
+        elif self.config.wrapper_type == GENERATIVE_WRAPPER:
+            feature_dict['output_ids'] = torch.tensor([f.output_ids for f in features], dtype=torch.long)
+            feature_dict['output_loss_mask'] = torch.tensor([f.output_loss_mask for f in features], dtype=torch.long)
+            if 'token_ids' in features[0].meta:
+                tprob_key = 'token_probabilities'
+                feature_dict['token_ids'] = torch.tensor([f.meta['token_ids'] for f in features], dtype=torch.long)
+                feature_dict[tprob_key] = torch.tensor([f.meta[tprob_key] for f in features], dtype=torch.float)
+
         if self.task_helper:
             self.task_helper.add_features_to_dict(features, feature_dict)
 
         return DictDataset(**feature_dict)
 
-    def _convert_examples_to_features(self, examples: List[InputExample], labelled: bool = True,
+    def _convert_examples_to_features(self, examples: List[InputExample], pattern_ids: List[int], labelled: bool = True,
                                       priming: bool = False) -> List[InputFeatures]:
         features = []
         for (ex_index, example) in enumerate(examples):
             if ex_index % 10000 == 0:
                 logger.info("Writing example {}".format(ex_index))
-            input_features = self.preprocessor.get_input_features(example, labelled=labelled, priming=priming)
-            if self.task_helper:
-                self.task_helper.add_special_input_features(example, input_features)
-            features.append(input_features)
-            if ex_index < 5:
-                logger.info(f'--- Example {ex_index} ---')
-                logger.info(input_features.pretty_print(self.tokenizer))
+            for pattern_id in pattern_ids:
+                input_features = self.preprocessor.get_input_features(
+                    example, pattern_id=pattern_id, labelled=labelled, priming=priming)
+                if self.task_helper:
+                    self.task_helper.add_special_input_features(example, input_features)
+                features.append(input_features)
+
+        logger.info(f"Created {len(features)} input features from {len(examples)} examples...")
         return features
 
     def _mask_tokens(self, input_ids):
@@ -475,11 +649,14 @@ class TransformerModelWrapper:
                        alpha: float = 0, **_) -> torch.Tensor:
         """Perform a MLM training step."""
 
+        assert len(self.preprocessor.pvps) == 1
+        pvp = self.preprocessor.pvps[0]
+
         inputs = self.generate_default_inputs(labeled_batch)
         mlm_labels, labels = labeled_batch['mlm_labels'], labeled_batch['labels']
 
         outputs = self.model(**inputs)
-        prediction_scores = self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(mlm_labels, outputs[0])
+        prediction_scores = pvp.convert_mlm_logits_to_cls_logits(mlm_labels, outputs[0])
         loss = nn.CrossEntropyLoss()(prediction_scores.view(-1, len(self.config.label_list)), labels.view(-1))
 
         if lm_training:
@@ -492,16 +669,45 @@ class TransformerModelWrapper:
     def plm_train_step(self, labeled_batch: Dict[str, torch.Tensor], lm_training: bool = False, **_):
         """Perform a PLM training step."""
 
+        assert len(self.preprocessor.pvps) == 1
+        pvp = self.preprocessor.pvps[0]
+
         inputs = self.generate_default_inputs(labeled_batch)
         inputs['perm_mask'], inputs['target_mapping'] = labeled_batch['perm_mask'], labeled_batch['target_mapping']
         labels = labeled_batch['labels']
         outputs = self.model(**inputs)
-        prediction_scores = self.preprocessor.pvp.convert_plm_logits_to_cls_logits(outputs[0])
+        prediction_scores = pvp.convert_plm_logits_to_cls_logits(outputs[0])
         loss = nn.CrossEntropyLoss()(prediction_scores.view(-1, len(self.config.label_list)), labels.view(-1))
 
         if lm_training:
             raise NotImplementedError("Language model training is currently not implemented for PLMs")
 
+        return loss
+
+    def generative_train_step(self, labeled_batch: Dict[str, torch.Tensor], epsilon: float = 0.1, **_):
+
+        inputs = self.generate_default_inputs(labeled_batch)
+        inputs['labels'] = labeled_batch['output_ids']
+
+        # we need to manually provide the decoder_input_ids here due to a bug in the original implementation that
+        # shifts all tokens to the right (which is correct for BART, but not for PEGASUS) instead of inserting <pad>.
+        labels = inputs['labels']
+        first_token_tensor = torch.tensor(
+            [[self.tokenizer.pad_token_id]], device=labels.device
+        ).repeat(labels.shape[0], 1)
+
+        inputs['decoder_input_ids'] = torch.cat([first_token_tensor, labels], dim=1)[:, :-1]
+
+        lm_logits = self.model(**inputs, use_cache=False)[1]
+        cfg = self.model.module.config if hasattr(self.model, 'module') else self.model.config
+
+        labels = labeled_batch['output_ids']
+        label_mask = labeled_batch['output_loss_mask']
+        labels = labels * label_mask + (1 - label_mask) * self.tokenizer.pad_token_id
+
+        loss_fct = LabelSmoothingLoss(label_smoothing=epsilon, tgt_vocab_size=cfg.vocab_size,
+                                      ignore_index=self.tokenizer.pad_token_id).to(labels.device)
+        loss = loss_fct(lm_logits.view(-1, cfg.vocab_size), labels.view(-1))
         return loss
 
     def sequence_classifier_train_step(self, batch: Dict[str, torch.Tensor], use_logits: bool = False,
@@ -524,14 +730,18 @@ class TransformerModelWrapper:
         """Perform a MLM evaluation step."""
         inputs = self.generate_default_inputs(batch)
         outputs = self.model(**inputs)
-        return self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(batch['mlm_labels'], outputs[0])
+        assert len(self.preprocessor.pvps) == 1
+        pvp = self.preprocessor.pvps[0]
+        return pvp.convert_mlm_logits_to_cls_logits(batch['mlm_labels'], outputs[0])
 
     def plm_eval_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Perform a PLM evaluation step."""
         inputs = self.generate_default_inputs(batch)
         inputs['perm_mask'], inputs['target_mapping'] = batch['perm_mask'], batch['target_mapping']
         outputs = self.model(**inputs)
-        return self.preprocessor.pvp.convert_plm_logits_to_cls_logits(outputs[0])
+        assert len(self.preprocessor.pvps) == 1
+        pvp = self.preprocessor.pvps[0]
+        return pvp.convert_plm_logits_to_cls_logits(outputs[0])
 
     def sequence_classifier_eval_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Perform a sequence classifier evaluation step."""

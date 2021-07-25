@@ -20,11 +20,13 @@ import os
 import random
 from abc import ABC, abstractmethod
 from collections import defaultdict, Counter
-from typing import List, Dict, Callable
+from typing import List, Dict, Callable, Union, Tuple
+
+from datasets import load_dataset
 
 import log
 from pet import task_helpers
-from pet.utils import InputExample
+from pet.utils import InputExample, GenerativeInputExample
 
 logger = log.get_logger('root')
 
@@ -118,6 +120,31 @@ class DataProcessor(ABC):
     def get_labels(self) -> List[str]:
         """Get the list of labels for this data set."""
         pass
+
+
+class GenerativeDataProcessor(DataProcessor, ABC):
+    @abstractmethod
+    def get_train_examples(self, data_dir) -> List[GenerativeInputExample]:
+        """Get a collection of `InputExample`s for the train set."""
+        pass
+
+    @abstractmethod
+    def get_dev_examples(self, data_dir) -> List[GenerativeInputExample]:
+        """Get a collection of `InputExample`s for the dev set."""
+        pass
+
+    @abstractmethod
+    def get_test_examples(self, data_dir) -> List[GenerativeInputExample]:
+        """Get a collection of `InputExample`s for the test set."""
+        pass
+
+    @abstractmethod
+    def get_unlabeled_examples(self, data_dir) -> List[GenerativeInputExample]:
+        """Get a collection of `InputExample`s for the unlabeled set."""
+        pass
+
+    def get_labels(self) -> List[str]:
+        return []
 
 
 class MnliProcessor(DataProcessor):
@@ -762,6 +789,99 @@ class RecordProcessor(DataProcessor):
         return examples
 
 
+class AeslcProcessor(GenerativeDataProcessor):
+    DATASET_NAME = 'aeslc'
+    INPUT_NAME = 'email_body'
+    OUTPUT_NAME = 'subject_line'
+
+    def __init__(self):
+        self.ds = None
+
+    def _init_ds(self, data_dir: str):
+        if self.ds is not None:
+            return
+
+        if self.DATASET_NAME == 'newsroom':
+            meta_info = {'path': 'newsroom', 'data_dir': data_dir, 'cache_dir': os.path.join(data_dir, 'cache')}
+        else:
+            meta_info = self.DATASET_NAME
+        self.ds = self.load_and_split_dataset(meta_info)
+
+    def get_train_examples(self, data_dir) -> List[GenerativeInputExample]:
+        self._init_ds(data_dir)
+        return self._convert_json_to_examples(self.ds['train'], 'train')
+
+    def get_dev_examples(self, data_dir) -> List[GenerativeInputExample]:
+        self._init_ds(data_dir)
+        return self._convert_json_to_examples(self.ds['validation'], 'dev')
+
+    def get_test_examples(self, data_dir) -> List[GenerativeInputExample]:
+        self._init_ds(data_dir)
+        return self._convert_json_to_examples(self.ds['test'], 'test')
+
+    def get_unlabeled_examples(self, data_dir) -> List[GenerativeInputExample]:
+        self._init_ds(data_dir)
+        return self._convert_json_to_examples(self.ds['train'], 'unlabeled', remove_labels=True)
+
+    def _convert_json_to_examples(self, json, set_type: str, remove_labels=False) -> List[GenerativeInputExample]:
+        examples = []
+        for idx, (input_text, output_text) in enumerate(zip(json[self.INPUT_NAME], json[self.OUTPUT_NAME])):
+            examples.append(GenerativeInputExample(
+                idx=idx,
+                guid=f'{set_type}-{idx}',
+                text_a=input_text,
+                output_text=output_text if not remove_labels else None
+            ))
+        return examples
+
+    @staticmethod
+    def load_and_split_dataset(dataset_name: Union[str, Tuple[str]]):
+        if isinstance(dataset_name, tuple):
+            ds = load_dataset(*dataset_name)
+        elif isinstance(dataset_name, dict):
+            ds = load_dataset(**dataset_name)
+        else:
+            ds = load_dataset(dataset_name)
+
+        if 'test' not in ds and 'validation' not in ds:
+            total_len = len(ds['train'])
+            ds_first_split = ds['train'].train_test_split(test_size=int(total_len * 0.1), seed=42)
+            ds_second_split = ds_first_split['train'].train_test_split(test_size=int(total_len * 0.1), seed=42)
+            ds = {
+                'train': ds_second_split['train'],
+                'validation': ds_second_split['test'],
+                'test': ds_first_split['test']
+            }
+        elif 'validation' not in ds:
+            ds_split = ds['train'].train_test_split(test_size=0.1, seed=42)
+            ds = {
+                'train': ds_split['train'],
+                'validation': ds_split['test'],
+                'test': ds['test']
+            }
+        return ds
+
+
+class XSumProcessor(AeslcProcessor):
+    DATASET_NAME, INPUT_NAME, OUTPUT_NAME = 'xsum', 'document', 'summary'
+
+
+class GigawordProcessor(AeslcProcessor):
+    DATASET_NAME, INPUT_NAME, OUTPUT_NAME = 'gigaword', 'document', 'summary'
+
+
+class RedditTifuProcessor(AeslcProcessor):
+    DATASET_NAME, INPUT_NAME, OUTPUT_NAME = ('reddit_tifu', 'long'), 'documents', 'tldr'
+
+
+class CnnDailymailProcessor(AeslcProcessor):
+    DATASET_NAME, INPUT_NAME, OUTPUT_NAME = ('cnn_dailymail', '3.0.0'), 'article', 'highlights'
+
+
+class NewsroomProcessor(AeslcProcessor):
+    DATASET_NAME, INPUT_NAME, OUTPUT_NAME = 'newsroom', 'text', 'summary'
+
+
 PROCESSORS = {
     "mnli": MnliProcessor,
     "mnli-mm": MnliMismatchedProcessor,
@@ -782,6 +902,12 @@ PROCESSORS = {
     "record": RecordProcessor,
     "ax-g": AxGProcessor,
     "ax-b": AxBProcessor,
+    "aeslc": AeslcProcessor,
+    "xsum": XSumProcessor,
+    "gigaword": GigawordProcessor,
+    "reddit-tifu": RedditTifuProcessor,
+    "cnn-dailymail": CnnDailymailProcessor,
+    "newsroom": NewsroomProcessor,
 }  # type: Dict[str,Callable[[],DataProcessor]]
 
 TASK_HELPERS = {
@@ -793,7 +919,13 @@ TASK_HELPERS = {
 
 METRICS = {
     "cb": ["acc", "f1-macro"],
-    "multirc": ["acc", "f1", "em"]
+    "multirc": ["acc", "f1", "em"],
+    "aeslc": ["rouge1", "rouge2", "rougeL"],
+    "xsum": ["rouge1", "rouge2", "rougeL"],
+    "gigaword": ["rouge1", "rouge2", "rougeL"],
+    "reddit-tifu": ["rouge1", "rouge2", "rougeL"],
+    "cnn-dailymail": ["rouge1", "rouge2", "rougeL"],
+    "newsroom": ["rouge1", "rouge2", "rougeL"],
 }
 
 DEFAULT_METRICS = ["acc"]
@@ -807,12 +939,15 @@ SET_TYPES = [TRAIN_SET, DEV_SET, TEST_SET, UNLABELED_SET]
 
 
 def load_examples(task, data_dir: str, set_type: str, *_, num_examples: int = None,
-                  num_examples_per_label: int = None, seed: int = 42) -> List[InputExample]:
+                  num_examples_per_label: int = None, seed: int = 42, shuffle: bool = True) -> List[InputExample]:
     """Load examples for a given task."""
     assert (num_examples is not None) ^ (num_examples_per_label is not None), \
         "Exactly one of 'num_examples' and 'num_examples_per_label' must be set."
     assert (not set_type == UNLABELED_SET) or (num_examples is not None), \
         "For unlabeled data, 'num_examples_per_label' is not allowed"
+
+    if num_examples == 0:
+        return []
 
     processor = PROCESSORS[task]()
 
@@ -831,12 +966,17 @@ def load_examples(task, data_dir: str, set_type: str, *_, num_examples: int = No
     elif set_type == UNLABELED_SET:
         examples = processor.get_unlabeled_examples(data_dir)
         for example in examples:
-            example.label = processor.get_labels()[0]
+            example.label = processor.get_labels()[0] if processor.get_labels() else None
     else:
         raise ValueError(f"'set_type' must be one of {SET_TYPES}, got '{set_type}' instead")
 
+    logger.info(f"Task processor has returned {len(examples)} {set_type} examples")
+
     if num_examples is not None:
-        examples = _shuffle_and_restrict(examples, num_examples, seed)
+        if shuffle:
+            examples = _shuffle_and_restrict(examples, num_examples, seed)
+        else:
+            examples = examples[:num_examples]
 
     elif num_examples_per_label is not None:
         limited_examples = LimitedExampleList(processor.get_labels(), num_examples_per_label)

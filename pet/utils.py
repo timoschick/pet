@@ -12,6 +12,7 @@
 
 import copy
 import json
+import math
 import pickle
 import random
 import string
@@ -21,6 +22,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 from torch.nn import functional as F
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, GPT2Tokenizer
 
@@ -111,11 +113,19 @@ class InputExample(object):
             pickle.dump(examples, fh)
 
 
+class GenerativeInputExample(InputExample):
+    """A raw input example for a generative model."""
+
+    def __init__(self, *vargs, output_text, **kwargs):
+        super().__init__(*vargs, **kwargs)
+        self.output_text = output_text
+
+
 class InputFeatures(object):
     """A set of numeric features obtained from an :class:`InputExample`"""
 
     def __init__(self, input_ids, attention_mask, token_type_ids, label, mlm_labels=None, logits=None,
-                 meta: Optional[Dict] = None, idx=-1):
+                 meta: Optional[Dict] = None, idx=-1, pattern_id: int = -1):
         """
         Create new InputFeatures.
 
@@ -127,6 +137,7 @@ class InputFeatures(object):
         :param logits: an optional sequence of per-class logits
         :param meta: an optional dictionary to store arbitrary meta information
         :param idx: an optional numeric index
+        :param pattern_id: the id of the pattern used to create this example
         """
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -135,6 +146,7 @@ class InputFeatures(object):
         self.mlm_labels = mlm_labels
         self.logits = logits
         self.idx = idx
+        self.pattern_id = pattern_id
         self.meta = meta if meta else {}
 
     def __repr__(self):
@@ -146,7 +158,8 @@ class InputFeatures(object):
                f'token_type_ids    = {self.token_type_ids}\n' + \
                f'mlm_labels        = {self.mlm_labels}\n' + \
                f'logits            = {self.logits}\n' + \
-               f'label             = {self.label}'
+               f'label             = {self.label}\n' + \
+               f'pattern_id        = {self.pattern_id}'
 
     def to_dict(self):
         """Serialize this instance to a Python dictionary."""
@@ -170,6 +183,19 @@ class PLMInputFeatures(InputFeatures):
         return super().pretty_print(tokenizer) + '\n' + \
                f'perm_mask         = {self.perm_mask}\n' + \
                f'target_mapping    = {self.target_mapping}'
+
+
+class GenerativeInputFeatures(InputFeatures):
+    """A set of numeric input features for a generative model."""
+
+    def __init__(self, *vargs, output_ids, output_loss_mask, **kwargs):
+        super().__init__(*vargs, **kwargs)
+        self.output_ids = output_ids
+        self.output_loss_mask = output_loss_mask
+
+    def pretty_print(self, tokenizer):
+        return super().pretty_print(tokenizer) + '\n' + \
+               f'output_ids        = {tokenizer.convert_ids_to_tokens(self.output_ids)}'
 
 
 class DictDataset(Dataset):
@@ -233,9 +259,13 @@ def save_predictions(path: str, wrapper, results: Dict):
     if wrapper.task_helper and wrapper.task_helper.output:
         predictions_with_idx = wrapper.task_helper.output
     else:
-        inv_label_map = {idx: label for label, idx in wrapper.preprocessor.label_map.items()}
-        for idx, prediction_idx in zip(results['indices'], results['predictions']):
-            prediction = inv_label_map[prediction_idx]
+        if wrapper.config.wrapper_type != 'generative':
+            inv_label_map = {idx: label for label, idx in wrapper.preprocessor.label_map.items()}
+        else:
+            inv_label_map = None
+        for idx, prediction in zip(results['indices'], results['predictions']):
+            if wrapper.config.wrapper_type != 'generative':
+                prediction = inv_label_map[prediction]
             idx = idx.tolist() if isinstance(idx, np.ndarray) else int(idx)
             predictions_with_idx.append({'idx': idx, 'label': prediction})
 
@@ -340,3 +370,73 @@ def distillation_loss(predictions, targets, temperature):
     p = F.log_softmax(predictions / temperature, dim=1)
     q = F.softmax(targets / temperature, dim=1)
     return F.kl_div(p, q, reduction='sum') * (temperature ** 2) / predictions.shape[0]
+
+
+def reduce_loss(loss, reduction='mean'):
+    return loss.mean() if reduction == 'mean' else loss.sum() if reduction == 'sum' else loss
+
+
+def linear_combination(x, y, epsilon):
+    return epsilon * x + (1 - epsilon) * y
+
+
+def get_sqrt_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
+    """
+    Create a schedule with square root decay for the learning rate from the initial lr set in the optimizer to 0,
+    after a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (:obj:`int`):
+            The number of steps for the warmup phase.
+        num_training_steps (:obj:`int`):
+            The total number of training steps.
+        last_epoch (:obj:`int`, `optional`, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+    """
+
+    def lr_lambda(current_step: int):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        return math.sqrt(max(
+            0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
+        ))
+
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
+
+class LabelSmoothingLoss(torch.nn.Module):
+    """
+    With label smoothing,
+    KL-divergence between q_{smoothed ground truth prob.}(w)
+    and p_{prob. computed by model}(w) is minimized.
+    """
+
+    def __init__(self, label_smoothing, tgt_vocab_size, ignore_index=-100):
+        assert 0.0 <= label_smoothing <= 1.0
+        self.ignore_index = ignore_index
+        super(LabelSmoothingLoss, self).__init__()
+
+        smoothing_value = label_smoothing / (tgt_vocab_size - 2)
+        one_hot = torch.full((tgt_vocab_size,), smoothing_value)
+        one_hot[self.ignore_index] = 0
+        self.register_buffer('one_hot', one_hot.unsqueeze(0))
+
+        self.confidence = 1.0 - label_smoothing
+
+    def forward(self, output, target):
+        """
+        output (FloatTensor): batch_size x n_classes
+        target (LongTensor): batch_size
+        """
+
+        output = F.log_softmax(output, dim=-1)
+        model_prob = self.one_hot.repeat(target.size(0), 1)
+        model_prob.scatter_(1, target.unsqueeze(1), self.confidence)
+        model_prob.masked_fill_((target == self.ignore_index).unsqueeze(1), 0)
+
+        return F.kl_div(output, model_prob, reduction='sum')
