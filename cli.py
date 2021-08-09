@@ -198,7 +198,7 @@ def main():
                         help="Whether to use untrained models to score output candidates used for distillation instead of trained models "
                              "(only for generative models and tasks)")
     parser.add_argument("--cutoff_percentage", default=0, type=float,
-                        help="Of all generated outputs, the `cutoff_percentage`*100% outputs with the least probability are discarded for "
+                        help="Of all generated outputs, the `cutoff_percentage`*100%% outputs with the least probability are discarded for "
                              "distillation (only for generative models and tasks)")
     parser.add_argument("--samples_per_example", default=2, type=int,
                         help="The number of times to sample an output for each input to generate the training set for distilling the final "
