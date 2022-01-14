@@ -8,3 +8,4 @@
 glue_data/*
 out/*
 venv/*
+cache*

@@ -248,10 +248,14 @@ def main():
     unlabeled_data = load_examples(
         args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples)
 
+    logger.info("Getting metrics ...")
     args.metrics = METRICS.get(args.task_name, DEFAULT_METRICS)
 
+    logger.info("Loading pet configs ...")
     pet_model_cfg, pet_train_cfg, pet_eval_cfg = load_pet_configs(args)
+    logger.info("Loading sequence classifier configs ...")
     sc_model_cfg, sc_train_cfg, sc_eval_cfg = load_sequence_classifier_configs(args)
+    logger.info("Loading ipet configs ...")
     ipet_cfg = load_ipet_config(args)
 
     if args.method == 'pet':

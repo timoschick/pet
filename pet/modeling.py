@@ -243,6 +243,7 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
     """
 
     # Step 1: Train an ensemble of models corresponding to individual patterns
+    logger.info("Train_pet step 1: train an ensemble.")
     train_pet_ensemble(ensemble_model_config, ensemble_train_config, ensemble_eval_config, pattern_ids, output_dir,
                        repetitions=ensemble_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
                        eval_data=eval_data, do_train=do_train, do_eval=do_eval,
@@ -252,6 +253,7 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
         return
 
     # Step 2: Merge the annotations created by each individual model
+    logger.info("Train_pet step 2: merge annotations.")
     logits_file = os.path.join(output_dir, 'unlabeled_logits.txt')
     merge_logits(output_dir, logits_file, reduction)
     logits = LogitsList.load(logits_file).logits
@@ -261,6 +263,7 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
         example.logits = example_logits
 
     # Step 3: Train the final sequence classifier model
+    logger.info("Train_pet step 3: train final classifier C.")
     final_model_config.wrapper_type = SEQUENCE_CLASSIFIER_WRAPPER
     final_train_config.use_logits = True
 
@@ -338,6 +341,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
             if not os.path.exists(pattern_iter_output_dir):
                 os.makedirs(pattern_iter_output_dir)
 
+            logger.info("Initialize model ...")
             wrapper = init_model(model_config)
 
             # Training
@@ -350,6 +354,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 else:
                     ipet_train_data = None
 
+                logger.info("Train single model ...")
                 results_dict.update(train_single_model(wrapper, train_data, train_config, eval_config,
                                                        ipet_train_data=ipet_train_data,
                                                        unlabeled_data=unlabeled_data))
@@ -431,6 +436,7 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
     model.model.to(device)
 
     if train_data and return_train_set_results:
+        logger.info("Get train set before training ...")
         results_dict['train_set_before_training'] = evaluate(model, train_data, eval_config)['scores']['acc']
 
     all_train_data = train_data + ipet_train_data
