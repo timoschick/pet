@@ -9,3 +9,4 @@ glue_data/*
 out/*
 venv/*
 cache*
+outputs/*

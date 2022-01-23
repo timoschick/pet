@@ -175,6 +175,53 @@ class MnliMismatchedProcessor(MnliProcessor):
         raise NotImplementedError()
 
 
+class EhansProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+        return self._create_examples(EhansProcessor._read_csv(os.path.join(data_dir, "train_32_nl.csv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        return self._create_examples(EhansProcessor._read_csv(os.path.join(data_dir, "dev_7_nl.csv")), "dev")
+
+    def get_test_examples(self, data_dir) -> List[InputExample]:
+        return self._create_examples(EhansProcessor._read_csv(os.path.join(data_dir, "test_ovot_300_nl.csv")), "test")
+
+    def get_unlabeled_examples(self, data_dir) -> List[InputExample]:
+        return self.get_train_examples(data_dir)
+
+    def get_labels(self):
+        return ["entailment", "neutral"]
+
+    @staticmethod
+    def _create_examples(lines: List[List[str]], set_type: str) -> List[InputExample]:
+        examples = []
+
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, line[0])
+            label = line[1]
+            premise = line[2]
+            hypothesis = line[3]
+            expl = line[4] # gold expl 1
+            assert isinstance(premise, str) and isinstance(hypothesis, str) and \
+            isinstance(expl, str) and isinstance(label, str)
+            
+            example = InputExample(guid=guid, text_a=premise, text_b=hypothesis, label=label)
+
+            examples.append(example)
+        return examples
+
+    @staticmethod
+    def _read_csv(input_file, quotechar=None):
+        with open(input_file, newline='') as f:
+            import csv
+            reader = csv.reader(f)
+            lines = []
+            for line in reader:
+                lines.append(line)
+            return lines
+
+
 class AgnewsProcessor(DataProcessor):
     """Processor for the AG news data set."""
 
@@ -765,6 +812,7 @@ class RecordProcessor(DataProcessor):
 PROCESSORS = {
     "mnli": MnliProcessor,
     "mnli-mm": MnliMismatchedProcessor,
+    "ehans": EhansProcessor,
     "agnews": AgnewsProcessor,
     "yahoo": YahooAnswersProcessor,
     "yelp-polarity": YelpPolarityProcessor,

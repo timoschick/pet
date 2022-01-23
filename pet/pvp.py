@@ -354,6 +354,31 @@ class MnliPVP(PVP):
         return MnliPVP.VERBALIZER_B[label]
 
 
+class EhansPVP(PVP):
+    VERBALIZER_A = {
+        "entailment": ["Right"],
+        "neutral": ["Maybe"]
+    }
+    VERBALIZER_B = {
+        "entailment": ["Yes"],
+        "neutral": ["Maybe"]
+    }
+
+    def get_parts(self, example: InputExample) -> FilledPattern:
+        text_a = self.shortenable(self.remove_final_punc(example.text_a))
+        text_b = self.shortenable(example.text_b)
+
+        if self.pattern_id == 0 or self.pattern_id == 2:
+            return ['"', text_a, '" ?'], [self.mask, ', "', text_b, '"']
+        elif self.pattern_id == 1 or self.pattern_id == 3:
+            return [text_a, '?'], [self.mask, ',', text_b]
+
+    def verbalize(self, label) -> List[str]:
+        if self.pattern_id == 0 or self.pattern_id == 1:
+            return MnliPVP.VERBALIZER_A[label]
+        return MnliPVP.VERBALIZER_B[label]
+
+
 class YelpPolarityPVP(PVP):
     VERBALIZER = {
         "1": ["bad"],
@@ -621,6 +646,7 @@ class RecordPVP(PVP):
 PVPS = {
     'agnews': AgnewsPVP,
     'mnli': MnliPVP,
+    'ehans': EhansPVP,
     'yelp-polarity': YelpPolarityPVP,
     'yelp-full': YelpFullPVP,
     'yahoo': YahooPVP,

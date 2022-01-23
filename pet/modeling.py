@@ -14,6 +14,7 @@ import json
 import os
 import random
 import statistics
+import time
 from abc import ABC
 from collections import defaultdict
 from copy import deepcopy
@@ -354,11 +355,16 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 else:
                     ipet_train_data = None
 
-                logger.info("Train single model ...")
+                logger.info("Train single model ... (one repetition)")
+                logger.info("Time: {}".format(time.ctime()))
                 results_dict.update(train_single_model(wrapper, train_data, train_config, eval_config,
                                                        ipet_train_data=ipet_train_data,
-                                                       unlabeled_data=unlabeled_data))
+                                                       unlabeled_data=unlabeled_data,
+                                                       pattern_iter_output_dir=pattern_iter_output_dir))
 
+                # Saving twice at the end of three epochs 
+                # because the final classifier uses the saved models without epoch numbers,
+                # and I also want to save the models with epoch numbers in them for better trackability.
                 with open(os.path.join(pattern_iter_output_dir, 'results.txt'), 'w') as fh:
                     fh.write(str(results_dict))
 
@@ -367,6 +373,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 train_config.save(os.path.join(pattern_iter_output_dir, 'train_config.json'))
                 eval_config.save(os.path.join(pattern_iter_output_dir, 'eval_config.json'))
                 logger.info("Saving complete")
+                logger.info("Time: {}".format(time.ctime()))
 
                 if save_unlabeled_logits:
                     logits = evaluate(wrapper, unlabeled_data, eval_config)['logits']
@@ -380,6 +387,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
             # Evaluation
             if do_eval:
                 logger.info("Starting evaluation...")
+                logger.info("Time: {}".format(time.ctime()))
                 if not wrapper:
                     wrapper = TransformerModelWrapper.from_pretrained(pattern_iter_output_dir)
 
@@ -391,6 +399,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 scores = eval_result['scores']
                 logger.info("--- RESULT (pattern_id={}, iteration={}) ---".format(pattern_id, iteration))
                 logger.info(scores)
+                logger.info("Time: {}".format(time.ctime()))
 
                 results_dict['test_set_after_training'] = scores
                 with open(os.path.join(pattern_iter_output_dir, 'results.json'), 'w') as fh:
@@ -412,7 +421,8 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
 def train_single_model(model: TransformerModelWrapper, train_data: List[InputExample], config: TrainConfig,
                        eval_config: EvalConfig = None, ipet_train_data: List[InputExample] = None,
-                       unlabeled_data: List[InputExample] = None, return_train_set_results: bool = True):
+                       unlabeled_data: List[InputExample] = None, return_train_set_results: bool = True,
+                       pattern_iter_output_dir: str = None):
     """
     Train a single model.
 
@@ -461,7 +471,10 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
             lm_training=config.lm_training,
             use_logits=config.use_logits,
             alpha=config.alpha,
-            temperature=config.temperature
+            temperature=config.temperature,
+            pattern_iter_output_dir=pattern_iter_output_dir,
+            train_config=config,
+            eval_config=eval_config
         )
         results_dict['global_step'] = global_step
         results_dict['average_loss'] = tr_loss

@@ -196,7 +196,10 @@ class TransformerModelWrapper:
               learning_rate: float = 5e-5, adam_epsilon: float = 1e-8, warmup_steps=0, max_grad_norm: float = 1,
               logging_steps: int = 50, per_gpu_unlabeled_batch_size: int = 8, unlabeled_data: List[InputExample] = None,
               lm_training: bool = False, use_logits: bool = False, alpha: float = 0.8, temperature: float = 1,
-              max_steps=-1, **_):
+              max_steps=-1, pattern_iter_output_dir: str = None, 
+              # train_config: TrainConfig = None, eval_config: EvalConfig = None, 
+              train_config = None, eval_config = None, 
+              **_):
         """
         Train the underlying language model.
 
@@ -272,7 +275,7 @@ class TransformerModelWrapper:
 
         train_iterator = trange(int(num_train_epochs), desc="Epoch")
 
-        for _ in train_iterator:
+        for epoch_idx in train_iterator:
             epoch_iterator = tqdm(train_dataloader, desc="Iteration")
             for _, batch in enumerate(epoch_iterator):
                 self.model.train()
@@ -330,6 +333,28 @@ class TransformerModelWrapper:
                     epoch_iterator.close()
                     break
                 step += 1
+            
+            # pattern_iter_epoch_output_dir = "{}-e{}".format(pattern_iter_output_dir, epoch_idx)
+
+            # if os.path.exists(pattern_iter_epoch_output_dir):
+            #     logger.warning(f"Path {pattern_iter_epoch_output_dir} already exists, skipping it...")
+            #     continue
+
+            # if not os.path.exists(pattern_iter_epoch_output_dir):
+            #     os.makedirs(pattern_iter_epoch_output_dir)
+
+            # results_dict = {}
+            # results_dict['global_step'] = global_step
+            # results_dict['average_loss'] = (tr_loss / global_step if global_step > 0 else -1)
+            # with open(os.path.join(pattern_iter_epoch_output_dir, 'results.txt'), 'w') as fh:
+            #     fh.write(str(results_dict))
+
+            # logger.info("Saving trained model at {}...".format(pattern_iter_epoch_output_dir))
+            # self.save(pattern_iter_epoch_output_dir)
+            # train_config.save(os.path.join(pattern_iter_epoch_output_dir, 'train_config.json'))
+            # eval_config.save(os.path.join(pattern_iter_epoch_output_dir, 'eval_config.json'))
+            # logger.info("Saving complete")
+
             if 0 < max_steps < global_step:
                 train_iterator.close()
                 break
@@ -421,15 +446,15 @@ class TransformerModelWrapper:
                                       priming: bool = False) -> List[InputFeatures]:
         features = []
         for (ex_index, example) in enumerate(examples):
-            if ex_index % 10000 == 0:
-                logger.info("Writing example {}".format(ex_index))
+            # if ex_index % 10000 == 0:
+            #     logger.info("Writing example {}".format(ex_index))
             input_features = self.preprocessor.get_input_features(example, labelled=labelled, priming=priming)
             if self.task_helper:
                 self.task_helper.add_special_input_features(example, input_features)
             features.append(input_features)
-            if ex_index < 5:
-                logger.info(f'--- Example {ex_index} ---')
-                logger.info(input_features.pretty_print(self.tokenizer))
+            # if ex_index < 5:
+            #     logger.info(f'--- Example {ex_index} ---')
+            #     logger.info(input_features.pretty_print(self.tokenizer))
         return features
 
     def _mask_tokens(self, input_ids):
