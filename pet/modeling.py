@@ -443,6 +443,7 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
 
     results_dict = {}
 
+    logger.info("device: {}".format(device))
     model.model.to(device)
 
     if train_data and return_train_set_results:

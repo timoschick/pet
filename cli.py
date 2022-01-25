@@ -224,6 +224,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     args.device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
     args.n_gpu = torch.cuda.device_count()
+    logger.info("n_gpu: {}".format(args.n_gpu))
 
     # Prepare task
     args.task_name = args.task_name.lower()

@@ -10,3 +10,4 @@ out/*
 venv/*
 cache*
 outputs/*
+data/*
