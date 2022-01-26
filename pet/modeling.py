@@ -245,6 +245,7 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
 
     # Step 1: Train an ensemble of models corresponding to individual patterns
     logger.info("Train_pet step 1: train an ensemble.")
+    logger.info("Time: {}".format(time.ctime()))
     train_pet_ensemble(ensemble_model_config, ensemble_train_config, ensemble_eval_config, pattern_ids, output_dir,
                        repetitions=ensemble_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
                        eval_data=eval_data, do_train=do_train, do_eval=do_eval,
@@ -255,6 +256,7 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
 
     # Step 2: Merge the annotations created by each individual model
     logger.info("Train_pet step 2: merge annotations.")
+    logger.info("Time: {}".format(time.ctime()))
     logits_file = os.path.join(output_dir, 'unlabeled_logits.txt')
     merge_logits(output_dir, logits_file, reduction)
     logits = LogitsList.load(logits_file).logits
@@ -265,12 +267,16 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
 
     # Step 3: Train the final sequence classifier model
     logger.info("Train_pet step 3: train final classifier C.")
+    logger.info("Time: {}".format(time.ctime()))
     final_model_config.wrapper_type = SEQUENCE_CLASSIFIER_WRAPPER
     final_train_config.use_logits = True
 
     train_classifier(final_model_config, final_train_config, final_eval_config, os.path.join(output_dir, 'final'),
                      repetitions=final_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
                      eval_data=eval_data, do_train=do_train, do_eval=do_eval, seed=seed)
+    
+    logger.info("All done!")
+    logger.info("Time: {}".format(time.ctime()))
 
 
 def train_classifier(model_config: WrapperConfig, train_config: TrainConfig, eval_config: EvalConfig, output_dir: str,
@@ -376,8 +382,11 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 logger.info("Time: {}".format(time.ctime()))
 
                 if save_unlabeled_logits:
+                    start_time = time.time()
                     logits = evaluate(wrapper, unlabeled_data, eval_config)['logits']
                     save_logits(os.path.join(pattern_iter_output_dir, 'logits.txt'), logits)
+                    end_time = time.time()
+                    logger.info("Label unlabeled logits took {} seconds".format(round(end_time-start_time, 2)))
 
                 if not do_eval:
                     wrapper.model = None

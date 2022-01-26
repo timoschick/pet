@@ -145,13 +145,18 @@ class MnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
-            text_a = line[8]
-            text_b = line[9]
-            label = line[-1]
+            # guid = "%s-%s" % (set_type, line[0])
+            # text_a = line[8]
+            # text_b = line[9]
+            # label = line[-1]
+            guid = "%s-%s" % (set_type, line[8])
+            text_a = line[5]
+            text_b = line[6]
+            label = line[0]
 
-            example = InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label)
-            examples.append(example)
+            if label in ["contradiction", "entailment", "neutral"]:
+                example = InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label)
+                examples.append(example)
 
         return examples
 

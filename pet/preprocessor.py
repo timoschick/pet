@@ -126,6 +126,7 @@ class SequenceClassifierPreprocessor(Preprocessor):
                 example.text_b if example.text_b else None,
                 add_special_tokens=True,
                 max_length=self.wrapper.config.max_seq_length,
+                truncation=True
             )
         input_ids, token_type_ids = inputs["input_ids"], inputs.get("token_type_ids")
 
