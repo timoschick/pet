@@ -66,7 +66,7 @@ class LogitsList:
 class InputExample(object):
     """A raw input example consisting of one or two segments of text and a label"""
 
-    def __init__(self, guid, text_a, text_b=None, label=None, logits=None, meta: Optional[Dict] = None, idx=-1):
+    def __init__(self, guid, text_a, text_b=None, label=None, logits=None, meta: Optional[Dict] = None, idx=-1, expl=None):
         """
         Create a new InputExample.
 
@@ -85,6 +85,7 @@ class InputExample(object):
         self.logits = logits
         self.idx = idx
         self.meta = meta if meta else {}
+        self.expl = expl
 
     def __repr__(self):
         return str(self.to_json_string())

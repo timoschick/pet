@@ -383,7 +383,8 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
                 if save_unlabeled_logits:
                     start_time = time.time()
-                    logits = evaluate(wrapper, unlabeled_data, eval_config)['logits']
+                    # do not use explanations for labeling
+                    logits = evaluate(wrapper, unlabeled_data, eval_config, no_expl=True)['logits']
                     save_logits(os.path.join(pattern_iter_output_dir, 'logits.txt'), logits)
                     end_time = time.time()
                     logger.info("Label unlabeled logits took {} seconds".format(round(end_time-start_time, 2)))
@@ -496,7 +497,7 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
 
 
 def evaluate(model: TransformerModelWrapper, eval_data: List[InputExample], config: EvalConfig,
-             priming_data: List[InputExample] = None) -> Dict:
+             priming_data: List[InputExample] = None, no_expl: bool = False) -> Dict:
     """
     Evaluate a model.
 
@@ -516,7 +517,7 @@ def evaluate(model: TransformerModelWrapper, eval_data: List[InputExample], conf
 
     model.model.to(device)
     results = model.eval(eval_data, device, per_gpu_eval_batch_size=config.per_gpu_eval_batch_size,
-                         n_gpu=config.n_gpu, decoding_strategy=config.decoding_strategy, priming=config.priming)
+                         n_gpu=config.n_gpu, decoding_strategy=config.decoding_strategy, priming=config.priming, no_expl=no_expl)
 
     predictions = np.argmax(results['logits'], axis=1)
     scores = {}

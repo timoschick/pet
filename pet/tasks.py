@@ -182,13 +182,13 @@ class MnliMismatchedProcessor(MnliProcessor):
 
 class EhansProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
-        return self._create_examples(EhansProcessor._read_csv(os.path.join(data_dir, "train_32_nl.csv")), "train")
+        return self._create_examples(os.path.join(data_dir, "train_32_nl.csv"), "train")
 
     def get_dev_examples(self, data_dir):
-        return self._create_examples(EhansProcessor._read_csv(os.path.join(data_dir, "dev_7_nl.csv")), "dev")
+        return self._create_examples(os.path.join(data_dir, "dev_7_nl.csv"), "dev")
 
     def get_test_examples(self, data_dir) -> List[InputExample]:
-        return self._create_examples(EhansProcessor._read_csv(os.path.join(data_dir, "test_ovot_300_nl.csv")), "test")
+        return self._create_examples(os.path.join(data_dir, "test_ovot_300_nl.csv"), "test")
 
     def get_unlabeled_examples(self, data_dir) -> List[InputExample]:
         return self.get_train_examples(data_dir)
@@ -197,34 +197,72 @@ class EhansProcessor(DataProcessor):
         return ["entailment", "neutral"]
 
     @staticmethod
-    def _create_examples(lines: List[List[str]], set_type: str) -> List[InputExample]:
+    def _create_examples(path: str, set_type: str) -> List[InputExample]:
         examples = []
 
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "%s-%s" % (set_type, line[0])
-            label = line[1]
-            premise = line[2]
-            hypothesis = line[3]
-            expl = line[4] # gold expl 1
-            assert isinstance(premise, str) and isinstance(hypothesis, str) and \
-            isinstance(expl, str) and isinstance(label, str)
-            
-            example = InputExample(guid=guid, text_a=premise, text_b=hypothesis, label=label)
-
-            examples.append(example)
-        return examples
-
-    @staticmethod
-    def _read_csv(input_file, quotechar=None):
-        with open(input_file, newline='') as f:
-            import csv
+        with open(path, newline='') as f:
             reader = csv.reader(f)
             lines = []
-            for line in reader:
-                lines.append(line)
-            return lines
+            for (i, line) in enumerate(reader):
+                if i == 0:
+                    continue
+                guid = "%s-%s" % (set_type, line[0])
+                label = line[1]
+                premise = line[2]
+                hypothesis = line[3]
+                expl = line[4] # gold expl
+                assert isinstance(premise, str) and isinstance(hypothesis, str) and \
+                isinstance(expl, str) and isinstance(label, str)
+                
+                example = InputExample(guid=guid, text_a=premise, text_b=hypothesis, label=label)
+
+                examples.append(example)
+            
+        return examples
+
+
+class EsnliProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+        return self._create_examples(os.path.join(data_dir, "esnli_train_1.csv"), "train", no_expl=False)
+
+    def get_dev_examples(self, data_dir):
+        return self._create_examples(os.path.join(data_dir, "esnli_dev.csv"), "dev")
+
+    def get_test_examples(self, data_dir) -> List[InputExample]:
+        return self._create_examples(os.path.join(data_dir, "esnli_test.csv"), "test")
+
+    def get_unlabeled_examples(self, data_dir) -> List[InputExample]:
+        return self.get_train_examples(data_dir)
+
+    def get_labels(self):
+        return ["contradiction", "entailment", "neutral"]
+
+    @staticmethod
+    def _create_examples(path: str, set_type: str, no_expl=True) -> List[InputExample]:
+        examples = []
+
+        with open(path, newline='') as f:
+            reader = csv.reader(f)
+            lines = []
+            for (i, line) in enumerate(reader):
+                if i == 0:
+                    continue
+                guid = "%s-%s" % (set_type, line[0])
+                label = line[1]
+                premise = line[2]
+                hypothesis = line[3]
+                expl = line[4] # gold expl 1
+                assert isinstance(premise, str) and isinstance(hypothesis, str) and \
+                isinstance(expl, str) and isinstance(label, str)
+                
+                if no_expl:
+                    example = InputExample(guid=guid, text_a=premise, text_b=hypothesis, label=label)
+                else:
+                    example = InputExample(guid=guid, text_a=premise, text_b=hypothesis, label=label, expl=expl)
+                
+                examples.append(example)
+            
+        return examples
 
 
 class AgnewsProcessor(DataProcessor):
@@ -818,6 +856,7 @@ PROCESSORS = {
     "mnli": MnliProcessor,
     "mnli-mm": MnliMismatchedProcessor,
     "ehans": EhansProcessor,
+    "esnli": EsnliProcessor,
     "agnews": AgnewsProcessor,
     "yahoo": YahooAnswersProcessor,
     "yelp-polarity": YelpPolarityProcessor,

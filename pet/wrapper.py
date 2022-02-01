@@ -362,7 +362,8 @@ class TransformerModelWrapper:
         return global_step, (tr_loss / global_step if global_step > 0 else -1)
 
     def eval(self, eval_data: List[InputExample], device, per_gpu_eval_batch_size: int = 8, n_gpu: int = 1,
-             priming: bool = False, decoding_strategy: str = 'default') -> Dict:
+             priming: bool = False, decoding_strategy: str = 'default',
+             no_expl: bool = False) -> Dict:
         """
         Evaluate the underlying language model.
 
@@ -376,7 +377,7 @@ class TransformerModelWrapper:
                  each evaluation example.
         """
 
-        eval_dataset = self._generate_dataset(eval_data, priming=priming)
+        eval_dataset = self._generate_dataset(eval_data, priming=priming, no_expl=no_expl)
         eval_batch_size = per_gpu_eval_batch_size * max(1, n_gpu)
         eval_sampler = SequentialSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=eval_batch_size)
@@ -422,8 +423,9 @@ class TransformerModelWrapper:
             'question_ids': question_ids
         }
 
-    def _generate_dataset(self, data: List[InputExample], labelled: bool = True, priming: bool = False):
-        features = self._convert_examples_to_features(data, labelled=labelled, priming=priming)
+    def _generate_dataset(self, data: List[InputExample], labelled: bool = True, priming: bool = False,
+                          no_expl: bool = False):
+        features = self._convert_examples_to_features(data, labelled=labelled, priming=priming, no_expl=no_expl)
         feature_dict = {
             'input_ids': torch.tensor([f.input_ids for f in features], dtype=torch.long),
             'attention_mask': torch.tensor([f.attention_mask for f in features], dtype=torch.long),
@@ -443,12 +445,12 @@ class TransformerModelWrapper:
         return DictDataset(**feature_dict)
 
     def _convert_examples_to_features(self, examples: List[InputExample], labelled: bool = True,
-                                      priming: bool = False) -> List[InputFeatures]:
+                                      priming: bool = False, no_expl: bool = False) -> List[InputFeatures]:
         features = []
         for (ex_index, example) in enumerate(examples):
             # if ex_index % 10000 == 0:
             #     logger.info("Writing example {}".format(ex_index))
-            input_features = self.preprocessor.get_input_features(example, labelled=labelled, priming=priming)
+            input_features = self.preprocessor.get_input_features(example, labelled=labelled, priming=priming, no_expl=no_expl)
             if self.task_helper:
                 self.task_helper.add_special_input_features(example, input_features)
             features.append(input_features)

@@ -108,7 +108,7 @@ class PVP(ABC):
             return PVP.lowercase_first(s[0]), s[1]
         return s[0].lower() + s[1:]
 
-    def encode(self, example: InputExample, priming: bool = False, labeled: bool = False) \
+    def encode(self, example: InputExample, priming: bool = False, labeled: bool = False, no_expl: bool = False) \
             -> Tuple[List[int], List[int]]:
         """
         Encode an input example using this pattern-verbalizer pair.
@@ -123,7 +123,7 @@ class PVP(ABC):
             assert not labeled, "'labeled' can only be set to true if 'priming' is also set to true"
 
         tokenizer = self.wrapper.tokenizer  # type: PreTrainedTokenizer
-        parts_a, parts_b = self.get_parts(example)
+        parts_a, parts_b = self.get_parts(example, no_expl=no_expl)
 
         kwargs = {'add_prefix_space': True} if isinstance(tokenizer, GPT2Tokenizer) else {}
 
@@ -182,7 +182,7 @@ class PVP(ABC):
                 self._remove_last(parts_b)
 
     @abstractmethod
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl: bool) -> FilledPattern:
         """
         Given an input example, apply a pattern to obtain two text sequences (text_a and text_b) containing exactly one
         mask token (or one consecutive sequence of mask tokens for PET with multiple masks). If a task requires only a
@@ -265,7 +265,7 @@ class AgnewsPVP(PVP):
         "4": ["Tech"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
 
         text_a = self.shortenable(example.text_a)
         text_b = self.shortenable(example.text_b)
@@ -303,7 +303,7 @@ class YahooPVP(PVP):
         "10": ["Politics"],
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
 
         text_a = self.shortenable(example.text_a)
         text_b = self.shortenable(example.text_b)
@@ -339,7 +339,7 @@ class MnliPVP(PVP):
         "neutral": ["Maybe"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         text_a = self.shortenable(self.remove_final_punc(example.text_a))
         text_b = self.shortenable(example.text_b)
 
@@ -354,7 +354,44 @@ class MnliPVP(PVP):
         return MnliPVP.VERBALIZER_B[label]
 
 
+class EsnliPVP(PVP):
+    VERBALIZER_A = {
+        "contradiction": ["Wrong"],
+        "entailment": ["Right"],
+        "neutral": ["Maybe"]
+    }
+    VERBALIZER_B = {
+        "contradiction": ["No"],
+        "entailment": ["Yes"],
+        "neutral": ["Maybe"]
+    }
+
+    def get_parts(self, example: InputExample, no_expl=False) -> FilledPattern:
+        text_a = self.shortenable(self.remove_final_punc(example.text_a))
+        text_b = self.shortenable(example.text_b)
+        expl = self.shortenable(example.expl)
+
+        if expl != None and not no_expl:
+            if self.pattern_id == 0 or self.pattern_id == 2:
+                return ['"', text_a, '" ?'], [self.mask, ', "', text_b, '" because "', expl, '"']
+            elif self.pattern_id == 1 or self.pattern_id == 3:
+                return [text_a, '?'], [self.mask, ',', text_b, ' because ', expl]
+        else:
+            if self.pattern_id == 0 or self.pattern_id == 2:
+                return ['"', text_a, '" ?'], [self.mask, ', "', text_b, '"']
+            elif self.pattern_id == 1 or self.pattern_id == 3:
+                return [text_a, '?'], [self.mask, ',', text_b]
+
+    def verbalize(self, label) -> List[str]:
+        if self.pattern_id == 0 or self.pattern_id == 1:
+            return EsnliPVP.VERBALIZER_A[label]
+        return EsnliPVP.VERBALIZER_B[label]
+
+
 class EhansPVP(PVP):
+    '''
+    Without explanation for now
+    '''
     VERBALIZER_A = {
         "entailment": ["Right"],
         "neutral": ["Maybe"]
@@ -364,7 +401,7 @@ class EhansPVP(PVP):
         "neutral": ["Maybe"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         text_a = self.shortenable(self.remove_final_punc(example.text_a))
         text_b = self.shortenable(example.text_b)
 
@@ -375,8 +412,8 @@ class EhansPVP(PVP):
 
     def verbalize(self, label) -> List[str]:
         if self.pattern_id == 0 or self.pattern_id == 1:
-            return MnliPVP.VERBALIZER_A[label]
-        return MnliPVP.VERBALIZER_B[label]
+            return EhansPVP.VERBALIZER_A[label]
+        return EhansPVP.VERBALIZER_B[label]
 
 
 class YelpPolarityPVP(PVP):
@@ -385,7 +422,7 @@ class YelpPolarityPVP(PVP):
         "2": ["good"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         text = self.shortenable(example.text_a)
 
         if self.pattern_id == 0:
@@ -423,7 +460,7 @@ class XStancePVP(PVP):
         'fr': {"FAVOR": ["Oui"], "AGAINST": ["Non"]}
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
 
         text_a = self.shortenable(example.text_a)
         text_b = self.shortenable(example.text_b)
@@ -444,7 +481,7 @@ class RtePVP(PVP):
         "entailment": ["Yes"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         # switch text_a and text_b to get the correct order
         text_a = self.shortenable(example.text_a)
         text_b = self.shortenable(example.text_b.rstrip(string.punctuation))
@@ -473,7 +510,7 @@ class CbPVP(RtePVP):
         "neutral": ["Maybe"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         if self.pattern_id == 4:
             text_a = self.shortenable(example.text_a)
             text_b = self.shortenable(example.text_b)
@@ -488,7 +525,7 @@ class CbPVP(RtePVP):
 
 class CopaPVP(PVP):
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
 
         premise = self.remove_final_punc(self.shortenable(example.text_a))
         choice1 = self.remove_final_punc(self.lowercase_first(example.meta['choice1']))
@@ -517,7 +554,7 @@ class CopaPVP(PVP):
 
 class WscPVP(PVP):
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         pronoun = example.meta['span2_text']
         target = example.meta['span1_text']
         pronoun_idx = example.meta['span2_index']
@@ -555,7 +592,7 @@ class BoolQPVP(PVP):
         "True": ["true"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         passage = self.shortenable(example.text_a)
         question = self.shortenable(example.text_b)
 
@@ -579,7 +616,7 @@ class MultiRcPVP(PVP):
         "1": ["Yes"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         passage = self.shortenable(example.text_a)
         question = example.text_b
         answer = example.meta['answer']
@@ -610,7 +647,7 @@ class WicPVP(PVP):
         "T": ["b"]
     }
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         text_a = self.shortenable(example.text_a)
         text_b = self.shortenable(example.text_b)
         word = example.meta['word']
@@ -630,7 +667,7 @@ class WicPVP(PVP):
 
 class RecordPVP(PVP):
 
-    def get_parts(self, example: InputExample) -> FilledPattern:
+    def get_parts(self, example: InputExample, no_expl=True) -> FilledPattern:
         premise = self.shortenable(example.text_a)
         choices = example.meta['candidates']
 
@@ -647,6 +684,7 @@ PVPS = {
     'agnews': AgnewsPVP,
     'mnli': MnliPVP,
     'ehans': EhansPVP,
+    'esnli': EsnliPVP,
     'yelp-polarity': YelpPolarityPVP,
     'yelp-full': YelpFullPVP,
     'yahoo': YahooPVP,
