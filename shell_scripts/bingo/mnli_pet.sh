@@ -1,4 +1,6 @@
 PET_DIR=/data/rosa/pet
+
+DATA_DIR=/data/shared/data/multinli_1.0/
 MODEL_TYPE=roberta
 MODEL=roberta-large
 TASK=mnli
@@ -10,15 +12,15 @@ MSG=replicate_with_all_params
 python3 ${PET_DIR}/cli.py \
 --method pet \
 --pattern_ids 0 1 2 3 \
---data_dir /data/rosa/data/multinli_1.0/ \
+--data_dir $DATA_DIR \
 --model_type $MODEL_TYPE \
 --model_name_or_path $MODEL \
 --task_name $TASK \
---output_dir /data/rosa/pet/outputs/pet_${TASK}_${MODEL}_${MSG}_T${NUM_TRAIN}_D${NUM_UNLABEL}_Test${NUM_TEST} \
+--output_dir ${PET_DIR}/outputs/pet_${TASK}_${MODEL}_${MSG}_T${NUM_TRAIN}_D${NUM_UNLABEL}_Test${NUM_TEST} \
 --do_train \
 --do_eval \
 --overwrite_output_dir \
---cache_dir /data/rosa/pet/cache/${MODEL}_${TASK}/ \
+--cache_dir ${PET_DIR}/cache/${MODEL}_${TASK}/ \
 --train_examples $NUM_TRAIN \
 --test_examples $NUM_TEST \
 --unlabeled_examples $NUM_UNLABEL \

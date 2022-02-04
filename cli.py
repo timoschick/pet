@@ -214,6 +214,12 @@ def main():
     parser.add_argument("--eval_set", choices=['dev', 'test'], default='dev',
                         help="Whether to perform evaluation on the dev set or the test set")
 
+    # explanations args
+    parser.add_argument('--e_pet_pred', action='store_true',
+                        help="Whether to use explanations patterns for verbalizer word prediction")
+    parser.add_argument('--e_pet_lm', action='store_true',
+                        help="Whether to use explanations patterns for mlm auxiliary task")
+
     args = parser.parse_args()
     logger.info("Parameters: {}".format(args))
 
@@ -243,11 +249,11 @@ def main():
     eval_set = TEST_SET if args.eval_set == 'test' else DEV_SET
 
     train_data = load_examples(
-        args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex, num_examples_per_label=train_ex_per_label)
+        args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex, num_examples_per_label=train_ex_per_label, no_expl=not args.e_pet_pred)
     eval_data = load_examples(
         args.task_name, args.data_dir, eval_set, num_examples=test_ex, num_examples_per_label=test_ex_per_label)
     unlabeled_data = load_examples(
-        args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples)
+        args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples, no_expl=not args.e_pet_lm)
 
     logger.info("Getting metrics ...")
     args.metrics = METRICS.get(args.task_name, DEFAULT_METRICS)
