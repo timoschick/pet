@@ -198,7 +198,7 @@ def train_ipet(ensemble_model_config: WrapperConfig, ensemble_train_config: Trai
     # Step 3: Merge the annotations created by each individual model
     logits_dir = os.path.join(output_dir, f'g{ipet_config.generations - 1}')
     logits_file = os.path.join(logits_dir, 'unlabeled_logits.txt')
-    merge_logits(logits_dir, logits_file, reduction)
+    merge_logits(logits_dir, logits_file, reduction, 'unlabeled')
     logits = LogitsList.load(logits_file).logits
     assert len(logits) == len(unlabeled_data)
     logger.info("Got {} logits from file {}".format(len(logits), logits_file))
@@ -252,13 +252,35 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
                        save_unlabeled_logits=not no_distillation, seed=seed)
 
     if no_distillation:
+        # Evaluate ensemble on eval data:
+        
+        # 1. merge annotations created by each individual model
+        logits_file = os.path.join(output_dir, 'eval_logits.txt')
+        merge_logits(output_dir, logits_file, reduction, 'eval')
+        logits = LogitsList.load(logits_file).logits
+        assert len(logits) == len(eval_data)
+        logger.info("Got {} logits from file {}".format(len(logits), logits_file))
+        
+        # 2. compute accuracy and store it
+        predictions = np.argmax(logits, axis=1)
+        # note: eval_data used sequential sampler
+        # TODO: get label map from code, currently hard coded for esnli and mnli
+        label_map = {label: i for i, label in enumerate(ensemble_model_config.label_list)}
+        labels = np.array([label_map[example.label] for example in eval_data])
+        accuracy = simple_accuracy(predictions, labels)
+        
+        results_file = os.path.join(output_dir, 'eval_ensemble.txt')
+        print('accuracy: ', accuracy)
+        with open(results_file, 'w') as fh:
+            fh.write('{} \n'.format(accuracy))
+
         return
 
     # Step 2: Merge the annotations created by each individual model
     logger.info("Train_pet step 2: merge annotations.")
     logger.info("Time: {}".format(time.ctime()))
     logits_file = os.path.join(output_dir, 'unlabeled_logits.txt')
-    merge_logits(output_dir, logits_file, reduction)
+    merge_logits(output_dir, logits_file, reduction, 'unlabeled')
     logits = LogitsList.load(logits_file).logits
     assert len(logits) == len(unlabeled_data)
     logger.info("Got {} logits from file {}".format(len(logits), logits_file))
@@ -558,7 +580,7 @@ def _write_results(path: str, results: Dict):
             fh.write(result_str + '\n')
 
 
-def merge_logits(logits_dir: str, output_file: str, reduction: str):
+def merge_logits(logits_dir: str, output_file: str, reduction: str, data_type: str):
     """
     Merge the logits predicted for unlabeled examples by multiple models.
 
@@ -569,6 +591,7 @@ def merge_logits(logits_dir: str, output_file: str, reduction: str):
     :param reduction: the strategy for merging logits, either 'mean' or 'wmean'. For 'mean', all models contribute
            equally, for 'wmean', each model's contribution is proportional to its accuracy on the training set before
            training.
+    :param data_type: 'eval' or 'unlabeled'.
     """
     subdirs = next(os.walk(logits_dir))[1]
     logger.info("Found the following {} subdirectories: {}".format(len(subdirs), subdirs))
@@ -577,7 +600,11 @@ def merge_logits(logits_dir: str, output_file: str, reduction: str):
 
     for subdir in subdirs:
         results_file = os.path.join(logits_dir, subdir, 'results.txt')
-        logits_file = os.path.join(logits_dir, subdir, 'logits.txt')
+        assert data_type in ['eval', 'unlabeled']
+        if data_type == 'eval':
+            logits_file = os.path.join(logits_dir, subdir, 'eval_logits.txt')
+        elif data_type == 'unlabeled':
+            logits_file = os.path.join(logits_dir, subdir, 'logits.txt')
         logits = []
 
         if not os.path.exists(results_file) or not os.path.exists(logits_file):
