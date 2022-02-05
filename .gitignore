@@ -13,3 +13,4 @@ outputs/*
 data/*
 
 .vscode/*
+wandb
