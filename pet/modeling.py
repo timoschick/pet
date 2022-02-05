@@ -445,7 +445,21 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
     if do_eval:
         logger.info("=== OVERALL RESULTS ===")
-        _write_results(os.path.join(output_dir, 'result_test.txt'), results)
+
+        # # TODO: Comment out this chunk once recovers result_test.txt
+        # if len(results.keys()) == 0:
+        #     # collect results from results.json in each pX-iX folder
+        #     for pattern_id in pattern_ids:
+        #         for iteration in range(repetitions):
+        #             pattern_iter_output_dir = "{}/p{}-i{}".format(output_dir, pattern_id, iteration)
+        #             with open(os.path.join(pattern_iter_output_dir, 'results.json'), 'r') as result_file:
+        #                 result_data = json.load(result_file)
+        #                 # need to update metric name if we use other
+        #                 value = result_data['test_set_after_training']['acc']
+        #                 results['acc'][pattern_id].append(value)
+
+        if len(results.keys()) != 0:
+            _write_results(os.path.join(output_dir, 'result_test.txt'), results)
     else:
         logger.info("=== ENSEMBLE TRAINING COMPLETE ===")
 
