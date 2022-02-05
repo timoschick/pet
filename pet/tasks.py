@@ -100,12 +100,12 @@ class DataProcessor(ABC):
         pass
 
     @abstractmethod
-    def get_dev_examples(self, data_dir) -> List[InputExample]:
+    def get_dev_examples(self, data_dir, no_expl) -> List[InputExample]:
         """Get a collection of `InputExample`s for the dev set."""
         pass
 
     @abstractmethod
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl) -> List[InputExample]:
         """Get a collection of `InputExample`s for the test set."""
         pass
 
@@ -126,10 +126,10 @@ class MnliProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(MnliProcessor._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(MnliProcessor._read_tsv(os.path.join(data_dir, "dev_matched.tsv")), "dev_matched")
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
@@ -173,10 +173,10 @@ class MnliProcessor(DataProcessor):
 class MnliMismatchedProcessor(MnliProcessor):
     """Processor for the MultiNLI mismatched data set (GLUE version)."""
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev_mismatched.tsv")), "dev_mismatched")
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
 
@@ -184,10 +184,10 @@ class EhansProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train_32_nl.csv"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "dev_7_nl.csv"), "dev")
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         return self._create_examples(os.path.join(data_dir, "test_ovot_300_nl.csv"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
@@ -225,11 +225,11 @@ class EsnliProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "esnli_train_1.csv"), "train", no_expl=no_expl)
 
-    def get_dev_examples(self, data_dir):
-        return self._create_examples(os.path.join(data_dir, "esnli_dev.csv"), "dev")
+    def get_dev_examples(self, data_dir, no_expl=True):
+        return self._create_examples(os.path.join(data_dir, "esnli_dev.csv"), "dev", no_expl=no_expl)
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
-        return self._create_examples(os.path.join(data_dir, "esnli_test.csv"), "test")
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
+        return self._create_examples(os.path.join(data_dir, "esnli_test.csv"), "test", no_expl=no_expl)
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         return self.get_train_examples(data_dir, no_expl=no_expl)
@@ -271,10 +271,10 @@ class AgnewsProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.csv"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.csv"), "dev")
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
@@ -307,10 +307,10 @@ class YahooAnswersProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.csv"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.csv"), "dev")
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
@@ -344,10 +344,10 @@ class YelpPolarityProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.csv"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.csv"), "dev")
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
@@ -376,7 +376,7 @@ class YelpPolarityProcessor(DataProcessor):
 class YelpFullProcessor(YelpPolarityProcessor):
     """Processor for the YELP full classification set."""
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
     def get_labels(self):
@@ -394,10 +394,10 @@ class XStanceProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"))
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"))
 
-    def get_test_examples(self, data_dir) -> List[InputExample]:
+    def get_test_examples(self, data_dir, no_expl=True) -> List[InputExample]:
         raise NotImplementedError()
 
     def get_unlabeled_examples(self, data_dir, no_expl=True) -> List[InputExample]:
@@ -436,10 +436,10 @@ class RteProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -478,7 +478,7 @@ class AxGProcessor(RteProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "AX-g.jsonl"), "train")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "AX-g.jsonl"), "test")
 
 
@@ -488,7 +488,7 @@ class AxBProcessor(RteProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "AX-b.jsonl"), "train")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "AX-b.jsonl"), "test")
 
     def _create_examples(self, path, set_type, hypothesis_name="sentence2", premise_name="sentence1"):
@@ -508,10 +508,10 @@ class WicProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -545,10 +545,10 @@ class WscProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -622,10 +622,10 @@ class BoolQProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -658,10 +658,10 @@ class CopaProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -711,10 +711,10 @@ class MultiRcProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -765,10 +765,10 @@ class RecordProcessor(DataProcessor):
     def get_train_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "train.jsonl"), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "val.jsonl"), "dev")
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "test.jsonl"), "test")
 
     def get_unlabeled_examples(self, data_dir, no_expl=True):
@@ -915,9 +915,9 @@ def load_examples(task, data_dir: str, set_type: str, *_, num_examples: int = No
     )
 
     if set_type == DEV_SET:
-        examples = processor.get_dev_examples(data_dir)
+        examples = processor.get_dev_examples(data_dir, no_expl=no_expl)
     elif set_type == TEST_SET:
-        examples = processor.get_test_examples(data_dir)
+        examples = processor.get_test_examples(data_dir, no_expl=no_expl)
     elif set_type == TRAIN_SET:
         examples = processor.get_train_examples(data_dir, no_expl=no_expl)
     elif set_type == UNLABELED_SET:

@@ -264,7 +264,6 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
         # 2. compute accuracy and store it
         predictions = np.argmax(logits, axis=1)
         # note: eval_data used sequential sampler
-        # TODO: get label map from code, currently hard coded for esnli and mnli
         label_map = {label: i for i, label in enumerate(ensemble_model_config.label_list)}
         labels = np.array([label_map[example.label] for example in eval_data])
         accuracy = simple_accuracy(predictions, labels)
@@ -405,7 +404,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
                 if save_unlabeled_logits:
                     start_time = time.time()
-                    # do not use explanations for labeling
+                    # do not use explanations for labeling 
                     logits = evaluate(wrapper, unlabeled_data, eval_config, no_expl=True)['logits']
                     save_logits(os.path.join(pattern_iter_output_dir, 'logits.txt'), logits)
                     end_time = time.time()
