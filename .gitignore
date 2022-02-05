@@ -11,3 +11,5 @@ venv/*
 cache*
 outputs/*
 data/*
+
+.vscode/*
