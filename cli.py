@@ -220,6 +220,8 @@ def main():
                         help="Whether to use explanations patterns for verbalizer word prediction")
     parser.add_argument('--e_pet_lm', action='store_true',
                         help="Whether to use explanations patterns for mlm auxiliary task")
+    parser.add_argument('--e_pet_test', action='store_true',
+                        help="Whether to use explanations patterns for testing pet")
 
     args = parser.parse_args()
     logger.info("Parameters: {}".format(args))
@@ -254,7 +256,7 @@ def main():
     train_data = load_examples(
         args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex, num_examples_per_label=train_ex_per_label, no_expl=not args.e_pet_pred)
     eval_data = load_examples(
-        args.task_name, args.data_dir, eval_set, num_examples=test_ex, num_examples_per_label=test_ex_per_label)
+        args.task_name, args.data_dir, eval_set, num_examples=test_ex, num_examples_per_label=test_ex_per_label, no_expl=not args.e_pet_test)
     unlabeled_data = load_examples(
         args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples, no_expl=not args.e_pet_lm)
 

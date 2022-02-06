@@ -8,7 +8,7 @@ TASK=esnli
 NUM_TRAIN=100
 NUM_TEST=-1
 NUM_UNLABEL=30000 
-MSG=e_only_lm
+MSG=e_always
 
 python3 ${PET_DIR}/cli.py \
 --method pet \
@@ -33,4 +33,7 @@ python3 ${PET_DIR}/cli.py \
 --sc_gradient_accumulation_steps 4 \
 --pet_gradient_accumulation_steps 4 \
 --split_examples_evenly \
---e_pet_lm
+--no_distillation \
+--e_pet_pred \
+--e_pet_lm \
+--e_pet_test 
