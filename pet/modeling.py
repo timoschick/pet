@@ -416,7 +416,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 with open(os.path.join(pattern_iter_output_dir, 'results.json'), 'w') as fh:
                     json.dump(results_dict, fh)
                 
-                wandb.log({'model' : 'p{}-i{}'.format(pattern_id, iteration), 'results' : results_dict})
+                wandb.log({'p{}-i{}-results'.format(pattern_id, iteration) : results_dict})
 
 
                 for metric, value in scores.items():
@@ -429,7 +429,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
     if do_eval:
         logger.info("=== OVERALL RESULTS ===")
         _write_results(os.path.join(output_dir, 'result_test.txt'), results)
-        wandb.log({'model' : 'ensemble', 'results' : results})
+        wandb.log({'ensemble-results' : results})
     else:
         logger.info("=== ENSEMBLE TRAINING COMPLETE ===")
 

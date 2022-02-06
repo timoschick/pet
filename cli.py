@@ -224,7 +224,7 @@ def main():
     args = parser.parse_args()
     logger.info("Parameters: {}".format(args))
     
-    wandb.init(project="pet", config=args)
+    wandb.init(project="pet", config=args, id=wandb.util.generate_id())
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) \
             and args.do_train and not args.overwrite_output_dir:
