@@ -26,6 +26,7 @@ from sklearn.metrics import f1_score
 from transformers.data.metrics import simple_accuracy
 
 import log
+import wandb
 from pet.utils import InputExample, exact_match, save_logits, save_predictions, softmax, LogitsList, set_seed, eq_div
 from pet.wrapper import TransformerModelWrapper, SEQUENCE_CLASSIFIER_WRAPPER, WrapperConfig
 
@@ -435,6 +436,9 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 results_dict['test_set_after_training'] = scores
                 with open(os.path.join(pattern_iter_output_dir, 'results.json'), 'w') as fh:
                     json.dump(results_dict, fh)
+                
+                wandb.log({'p{}-i{}-results'.format(pattern_id, iteration) : results_dict})
+
 
                 for metric, value in scores.items():
                     results[metric][pattern_id].append(value)
@@ -460,6 +464,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
         if len(results.keys()) != 0:
             _write_results(os.path.join(output_dir, 'result_test.txt'), results)
+            wandb.log({'ensemble-results' : results})
     else:
         logger.info("=== ENSEMBLE TRAINING COMPLETE ===")
 

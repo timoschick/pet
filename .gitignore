@@ -11,3 +11,7 @@ venv/*
 cache*
 outputs/*
 data/*
+
+.vscode/*
+wandb
+e-SNLI/*

@@ -20,12 +20,13 @@ import os
 from typing import Tuple
 
 import torch
-
+import wandb
 from pet.tasks import PROCESSORS, load_examples, UNLABELED_SET, TRAIN_SET, DEV_SET, TEST_SET, METRICS, DEFAULT_METRICS
 from pet.utils import eq_div
 from pet.wrapper import WRAPPER_TYPES, MODEL_CLASSES, SEQUENCE_CLASSIFIER_WRAPPER, WrapperConfig
 import pet
 import log
+
 
 logger = log.get_logger('root')
 
@@ -224,6 +225,8 @@ def main():
 
     args = parser.parse_args()
     logger.info("Parameters: {}".format(args))
+    
+    wandb.init(project="pet", config=args, id=wandb.util.generate_id())
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) \
             and args.do_train and not args.overwrite_output_dir:
