@@ -222,11 +222,12 @@ def main():
                         help="Whether to use explanations patterns for mlm auxiliary task")
     parser.add_argument('--e_pet_test', action='store_true',
                         help="Whether to use explanations patterns for testing pet")
+    parser.add_argument('--wandb_run_name', type=str, default=None)
 
     args = parser.parse_args()
     logger.info("Parameters: {}".format(args))
     
-    wandb.init(project="pet", config=args, id=wandb.util.generate_id())
+    wandb.init(project="pet", config=args, id=wandb.util.generate_id(), name=args.wandb_run_name)
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) \
             and args.do_train and not args.overwrite_output_dir:

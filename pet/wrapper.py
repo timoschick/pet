@@ -33,6 +33,7 @@ from transformers import InputExample, AdamW, get_linear_schedule_with_warmup, P
 from transformers import __version__ as transformers_version
 
 import log
+import wandb
 from pet import preprocessor
 from pet.tasks import TASK_HELPERS
 from pet.utils import InputFeatures, DictDataset, distillation_loss
@@ -508,12 +509,13 @@ class TransformerModelWrapper:
         outputs = self.model(**inputs)
         prediction_scores = self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(mlm_labels, outputs[0])
         loss = nn.CrossEntropyLoss()(prediction_scores.view(-1, len(self.config.label_list)), labels.view(-1))
-
+        wandb.log({"cls_loss" : loss})
         if lm_training:
             lm_inputs = self.generate_default_inputs(unlabeled_batch)
             lm_inputs['masked_lm_labels'] = unlabeled_batch['mlm_labels']
             lm_loss = self.model(**lm_inputs)[0]
             loss = alpha * loss + (1 - alpha) * lm_loss
+            wandb.log({"mlm_loss" : lm_loss})
         return loss
 
     def plm_train_step(self, labeled_batch: Dict[str, torch.Tensor], lm_training: bool = False, **_):

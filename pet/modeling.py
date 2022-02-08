@@ -271,6 +271,7 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
         
         results_file = os.path.join(output_dir, 'eval_ensemble.txt')
         print('accuracy: ', accuracy)
+        wandb.log({'ensemble-eval-accuracy' : accuracy})
         with open(results_file, 'w') as fh:
             fh.write('{} \n'.format(accuracy))
 
@@ -439,7 +440,6 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 
                 wandb.log({'p{}-i{}-results'.format(pattern_id, iteration) : results_dict})
 
-
                 for metric, value in scores.items():
                     results[metric][pattern_id].append(value)
 
@@ -464,7 +464,6 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
         if len(results.keys()) != 0:
             _write_results(os.path.join(output_dir, 'result_test.txt'), results)
-            wandb.log({'ensemble-results' : results})
     else:
         logger.info("=== ENSEMBLE TRAINING COMPLETE ===")
 
