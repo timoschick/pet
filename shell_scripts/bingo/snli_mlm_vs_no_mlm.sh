@@ -41,7 +41,8 @@ python3 ${PET_DIR}/cli.py \
 --pet_gradient_accumulation_steps 4 \
 --split_examples_evenly \
 --no_distillation \
---lm_training
+--lm_training \
+--wandb_run_name snli_mlm
 
 # setting (2)
 MSG=no_mlm
@@ -67,4 +68,5 @@ python3 ${PET_DIR}/cli.py \
 --split_examples_evenly \
 --no_distillation \
 --lm_training \
---alpha 1.0
+--alpha 1.0 \
+--wandb_run_name snli_no_mlm
