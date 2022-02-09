@@ -66,7 +66,9 @@ This repository contains the code for [Exploiting Cloze Questions for Few-Shot T
 
 ## 🔧 Setup
 
-All requirements for PET can be found in `requirements.txt`. You can install all required packages with `pip install -r requirements.txt`.
+Install all requirements by running `conda env create -f environment.yml`.
+
+~~All requirements for PET can be found in `requirements.txt`. You can install all required packages with `pip install -r requirements.txt`.~~
 
 ## 💬 CLI Usage
 
