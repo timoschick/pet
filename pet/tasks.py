@@ -222,8 +222,10 @@ class EhansProcessor(DataProcessor):
 
 
 class EsnliProcessor(DataProcessor):
+    def __init__(self):
+        self.train_file = "esnli_train_1.csv"
     def get_train_examples(self, data_dir, no_expl=True):
-        return self._create_examples(os.path.join(data_dir, "esnli_train_1.csv"), "train", no_expl=no_expl)
+        return self._create_examples(os.path.join(data_dir, self.train_file), "train", no_expl=no_expl)
 
     def get_dev_examples(self, data_dir, no_expl=True):
         return self._create_examples(os.path.join(data_dir, "esnli_dev.csv"), "dev", no_expl=no_expl)
@@ -264,6 +266,9 @@ class EsnliProcessor(DataProcessor):
             
         return examples
 
+class Esnli100Processor(EsnliProcessor):
+    def __init__(self):
+        self.train_file = "esnli_train_1_100.csv"
 
 class AgnewsProcessor(DataProcessor):
     """Processor for the AG news data set."""
@@ -857,6 +862,7 @@ PROCESSORS = {
     "mnli-mm": MnliMismatchedProcessor,
     "ehans": EhansProcessor,
     "esnli": EsnliProcessor,
+    "esnli-100": Esnli100Processor,
     "agnews": AgnewsProcessor,
     "yahoo": YahooAnswersProcessor,
     "yelp-polarity": YelpPolarityProcessor,

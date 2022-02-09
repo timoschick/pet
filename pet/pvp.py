@@ -685,6 +685,7 @@ PVPS = {
     'mnli': MnliPVP,
     'ehans': EhansPVP,
     'esnli': EsnliPVP,
+    'esnli-100':EsnliPVP,
     'yelp-polarity': YelpPolarityPVP,
     'yelp-full': YelpFullPVP,
     'yahoo': YahooPVP,
