@@ -10,7 +10,7 @@ MSG=snli_replicate
 
 export CUDA_VISIBLE_DEVICES=0
 
-python3 print_args.py \
+python3 cli.py \
 --method pet \
 --pattern_ids 0 1 2 3 \
 --data_dir $DATA_DIR \
