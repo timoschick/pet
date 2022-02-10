@@ -27,10 +27,23 @@ from transformers.data.metrics import simple_accuracy
 
 import log
 import wandb
-from pet.utils import InputExample, exact_match, save_logits, save_predictions, softmax, LogitsList, set_seed, eq_div
-from pet.wrapper import TransformerModelWrapper, SEQUENCE_CLASSIFIER_WRAPPER, WrapperConfig
+from pet.utils import (
+    InputExample,
+    exact_match,
+    save_logits,
+    save_predictions,
+    softmax,
+    LogitsList,
+    set_seed,
+    eq_div,
+)
+from pet.wrapper import (
+    TransformerModelWrapper,
+    SEQUENCE_CLASSIFIER_WRAPPER,
+    WrapperConfig,
+)
 
-logger = log.get_logger('root')
+logger = log.get_logger("root")
 
 
 class PetConfig(ABC):
@@ -41,14 +54,14 @@ class PetConfig(ABC):
 
     def save(self, path: str):
         """Save this config to a file."""
-        with open(path, 'w', encoding='utf8') as fh:
+        with open(path, "w", encoding="utf8") as fh:
             json.dump(self.__dict__, fh)
 
     @classmethod
     def load(cls, path: str):
         """Load a config from a file."""
         cfg = cls.__new__(cls)
-        with open(path, 'r', encoding='utf8') as fh:
+        with open(path, "r", encoding="utf8") as fh:
             cfg.__dict__ = json.load(fh)
         return cfg
 
@@ -56,11 +69,25 @@ class PetConfig(ABC):
 class TrainConfig(PetConfig):
     """Configuration for training a model."""
 
-    def __init__(self, device: str = None, per_gpu_train_batch_size: int = 8, per_gpu_unlabeled_batch_size: int = 8,
-                 n_gpu: int = 1, num_train_epochs: int = 3, max_steps: int = -1, gradient_accumulation_steps: int = 1,
-                 weight_decay: float = 0.0, learning_rate: float = 5e-5, adam_epsilon: float = 1e-8,
-                 warmup_steps: int = 0, max_grad_norm: float = 1, lm_training: bool = False, use_logits: bool = False,
-                 alpha: float = 0.9999, temperature: float = 1):
+    def __init__(
+        self,
+        device: str = None,
+        per_gpu_train_batch_size: int = 8,
+        per_gpu_unlabeled_batch_size: int = 8,
+        n_gpu: int = 1,
+        num_train_epochs: int = 3,
+        max_steps: int = -1,
+        gradient_accumulation_steps: int = 1,
+        weight_decay: float = 0.0,
+        learning_rate: float = 5e-5,
+        adam_epsilon: float = 1e-8,
+        warmup_steps: int = 0,
+        max_grad_norm: float = 1,
+        lm_training: bool = False,
+        use_logits: bool = False,
+        alpha: float = 0.9999,
+        temperature: float = 1,
+    ):
         """
         Create a new training config.
 
@@ -102,8 +129,15 @@ class TrainConfig(PetConfig):
 class EvalConfig(PetConfig):
     """Configuration for evaluating a model."""
 
-    def __init__(self, device: str = None, n_gpu: int = 1, per_gpu_eval_batch_size: int = 8,
-                 metrics: List[str] = None, decoding_strategy: str = 'default', priming: bool = False):
+    def __init__(
+        self,
+        device: str = None,
+        n_gpu: int = 1,
+        per_gpu_eval_batch_size: int = 8,
+        metrics: List[str] = None,
+        decoding_strategy: str = "default",
+        priming: bool = False,
+    ):
         """
         Create a new evaluation config.
 
@@ -125,8 +159,13 @@ class EvalConfig(PetConfig):
 class IPetConfig(PetConfig):
     """Configuration for iterative PET training."""
 
-    def __init__(self, generations: int = 3, logits_percentage: float = 0.25, scale_factor: float = 5,
-                 n_most_likely: int = -1):
+    def __init__(
+        self,
+        generations: int = 3,
+        logits_percentage: float = 0.25,
+        scale_factor: float = 5,
+        n_most_likely: int = -1,
+    ):
         """
         Create a new iPET config.
 
@@ -144,17 +183,33 @@ class IPetConfig(PetConfig):
 
 def init_model(config: WrapperConfig) -> TransformerModelWrapper:
     """Initialize a new model from the given config."""
-    assert config.pattern_id is not None, 'A pattern_id must be set for initializing a new PET model'
+    assert (
+        config.pattern_id is not None
+    ), "A pattern_id must be set for initializing a new PET model"
     model = TransformerModelWrapper(config)
     return model
 
 
-def train_ipet(ensemble_model_config: WrapperConfig, ensemble_train_config: TrainConfig,
-               ensemble_eval_config: EvalConfig, ipet_config: IPetConfig, final_model_config: WrapperConfig,
-               final_train_config: TrainConfig, final_eval_config: EvalConfig, pattern_ids: List[int], output_dir: str,
-               ensemble_repetitions: int = 3, final_repetitions: int = 1, reduction: str = 'wmean',
-               train_data: List[InputExample] = None, unlabeled_data: List[InputExample] = None,
-               eval_data: List[InputExample] = None, do_train: bool = True, do_eval: bool = True, seed: int = 42):
+def train_ipet(
+    ensemble_model_config: WrapperConfig,
+    ensemble_train_config: TrainConfig,
+    ensemble_eval_config: EvalConfig,
+    ipet_config: IPetConfig,
+    final_model_config: WrapperConfig,
+    final_train_config: TrainConfig,
+    final_eval_config: EvalConfig,
+    pattern_ids: List[int],
+    output_dir: str,
+    ensemble_repetitions: int = 3,
+    final_repetitions: int = 1,
+    reduction: str = "wmean",
+    train_data: List[InputExample] = None,
+    unlabeled_data: List[InputExample] = None,
+    eval_data: List[InputExample] = None,
+    do_train: bool = True,
+    do_eval: bool = True,
+    seed: int = 42,
+):
     """
     Train and evaluate a new iPET model for a given task.
 
@@ -178,28 +233,55 @@ def train_ipet(ensemble_model_config: WrapperConfig, ensemble_train_config: Trai
     :param seed: the random seed to use
     """
     for gen in range(ipet_config.generations):
-        gen_output_dir = os.path.join(output_dir, f'g{gen}')
+        gen_output_dir = os.path.join(output_dir, f"g{gen}")
 
         # Step 1: Train an ensemble of models corresponding to individual patterns
-        ipet_data_dir = os.path.join(output_dir, f'g{gen - 1}', 'next-gen-train-data') if gen > 0 else None
-        train_pet_ensemble(ensemble_model_config, ensemble_train_config, ensemble_eval_config, pattern_ids,
-                           gen_output_dir, ipet_data_dir=ipet_data_dir,
-                           repetitions=ensemble_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
-                           eval_data=eval_data, do_train=do_train, do_eval=do_eval, save_unlabeled_logits=True)
+        ipet_data_dir = (
+            os.path.join(output_dir, f"g{gen - 1}", "next-gen-train-data")
+            if gen > 0
+            else None
+        )
+        train_pet_ensemble(
+            ensemble_model_config,
+            ensemble_train_config,
+            ensemble_eval_config,
+            pattern_ids,
+            gen_output_dir,
+            ipet_data_dir=ipet_data_dir,
+            repetitions=ensemble_repetitions,
+            train_data=train_data,
+            unlabeled_data=unlabeled_data,
+            eval_data=eval_data,
+            do_train=do_train,
+            do_eval=do_eval,
+            save_unlabeled_logits=True
+        )
 
         # Step 2: Use the model to annotate examples for the next generation
-        original_data_size = len(train_data) if train_data else 10 / ipet_config.scale_factor
-        num_new_examples = int(original_data_size * (ipet_config.scale_factor ** (gen + 1)) - len(train_data))
-        generate_ipet_train_sets(train_data=train_data, unlabeled_data=unlabeled_data,
-                                 labels=ensemble_model_config.label_list, logits_dir=gen_output_dir,
-                                 output_dir=os.path.join(gen_output_dir, 'next-gen-train-data'), reduction=reduction,
-                                 num_new_examples=num_new_examples, logits_percentage=ipet_config.logits_percentage,
-                                 n_most_likely=ipet_config.n_most_likely if gen == 0 else -1, seed=seed)
+        original_data_size = (
+            len(train_data) if train_data else 10 / ipet_config.scale_factor
+        )
+        num_new_examples = int(
+            original_data_size * (ipet_config.scale_factor ** (gen + 1))
+            - len(train_data)
+        )
+        generate_ipet_train_sets(
+            train_data=train_data,
+            unlabeled_data=unlabeled_data,
+            labels=ensemble_model_config.label_list,
+            logits_dir=gen_output_dir,
+            output_dir=os.path.join(gen_output_dir, "next-gen-train-data"),
+            reduction=reduction,
+            num_new_examples=num_new_examples,
+            logits_percentage=ipet_config.logits_percentage,
+            n_most_likely=ipet_config.n_most_likely if gen == 0 else -1,
+            seed=seed,
+        )
 
     # Step 3: Merge the annotations created by each individual model
-    logits_dir = os.path.join(output_dir, f'g{ipet_config.generations - 1}')
-    logits_file = os.path.join(logits_dir, 'unlabeled_logits.txt')
-    merge_logits(logits_dir, logits_file, reduction, 'unlabeled')
+    logits_dir = os.path.join(output_dir, f"g{ipet_config.generations - 1}")
+    logits_file = os.path.join(logits_dir, "unlabeled_logits.txt")
+    merge_logits(logits_dir, logits_file, reduction, "unlabeled")
     logits = LogitsList.load(logits_file).logits
     assert len(logits) == len(unlabeled_data)
     logger.info("Got {} logits from file {}".format(len(logits), logits_file))
@@ -210,17 +292,41 @@ def train_ipet(ensemble_model_config: WrapperConfig, ensemble_train_config: Trai
     final_model_config.wrapper_type = SEQUENCE_CLASSIFIER_WRAPPER
     final_train_config.use_logits = True
 
-    train_classifier(final_model_config, final_train_config, final_eval_config, os.path.join(output_dir, 'final'),
-                     repetitions=final_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
-                     eval_data=eval_data, do_train=do_train, do_eval=do_eval)
+    train_classifier(
+        final_model_config,
+        final_train_config,
+        final_eval_config,
+        os.path.join(output_dir, "final"),
+        repetitions=final_repetitions,
+        train_data=train_data,
+        unlabeled_data=unlabeled_data,
+        eval_data=eval_data,
+        do_train=do_train,
+        do_eval=do_eval,
+    )
 
 
-def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: TrainConfig,
-              ensemble_eval_config: EvalConfig, final_model_config: WrapperConfig, final_train_config: TrainConfig,
-              final_eval_config: EvalConfig, pattern_ids: List[int], output_dir: str, ensemble_repetitions: int = 3,
-              final_repetitions: int = 1, reduction: str = 'wmean', train_data: List[InputExample] = None,
-              unlabeled_data: List[InputExample] = None, eval_data: List[InputExample] = None, do_train: bool = True,
-              do_eval: bool = True, no_distillation: bool = False, seed: int = 42):
+def train_pet(
+    ensemble_model_config: WrapperConfig,
+    ensemble_train_config: TrainConfig,
+    ensemble_eval_config: EvalConfig,
+    final_model_config: WrapperConfig,
+    final_train_config: TrainConfig,
+    final_eval_config: EvalConfig,
+    pattern_ids: List[int],
+    output_dir: str,
+    ensemble_repetitions: int = 3,
+    final_repetitions: int = 1,
+    reduction: str = "wmean",
+    train_data: List[InputExample] = None,
+    unlabeled_data: List[InputExample] = None,
+    eval_data: List[InputExample] = None,
+    do_train: bool = True,
+    do_eval: bool = True,
+    no_distillation: bool = False,
+    save_train_logits = False,
+    seed: int = 42,
+):
     """
     Train and evaluate a new PET model for a given task.
 
@@ -247,41 +353,61 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
     # Step 1: Train an ensemble of models corresponding to individual patterns
     logger.info("Train_pet step 1: train an ensemble.")
     logger.info("Time: {}".format(time.ctime()))
-    train_pet_ensemble(ensemble_model_config, ensemble_train_config, ensemble_eval_config, pattern_ids, output_dir,
-                       repetitions=ensemble_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
-                       eval_data=eval_data, do_train=do_train, do_eval=do_eval,
-                       save_unlabeled_logits=not no_distillation, seed=seed)
+    train_pet_ensemble(
+        ensemble_model_config,
+        ensemble_train_config,
+        ensemble_eval_config,
+        pattern_ids,
+        output_dir,
+        repetitions=ensemble_repetitions,
+        train_data=train_data,
+        unlabeled_data=unlabeled_data,
+        eval_data=eval_data,
+        do_train=do_train,
+        do_eval=do_eval,
+        save_unlabeled_logits=not no_distillation,
+        save_train_logits=save_train_logits,
+        seed=seed
+    )
+
+    if save_train_logits:
+        logits_file = os.path.join(output_dir, "train_logits.txt")
+        merge_logits(output_dir, logits_file, reduction, "train")
+
+
 
     if no_distillation:
         # Evaluate ensemble on eval data:
-        
+
         # 1. merge annotations created by each individual model
-        logits_file = os.path.join(output_dir, 'eval_logits.txt')
-        merge_logits(output_dir, logits_file, reduction, 'eval')
+        logits_file = os.path.join(output_dir, "eval_logits.txt")
+        merge_logits(output_dir, logits_file, reduction, "eval")
         logits = LogitsList.load(logits_file).logits
         assert len(logits) == len(eval_data)
         logger.info("Got {} logits from file {}".format(len(logits), logits_file))
-        
+
         # 2. compute accuracy and store it
         predictions = np.argmax(logits, axis=1)
         # note: eval_data used sequential sampler
-        label_map = {label: i for i, label in enumerate(ensemble_model_config.label_list)}
+        label_map = {
+            label: i for i, label in enumerate(ensemble_model_config.label_list)
+        }
         labels = np.array([label_map[example.label] for example in eval_data])
         accuracy = simple_accuracy(predictions, labels)
-        
-        results_file = os.path.join(output_dir, 'eval_ensemble.txt')
-        print('accuracy: ', accuracy)
-        wandb.log({'ensemble-eval-accuracy' : accuracy})
-        with open(results_file, 'w') as fh:
-            fh.write('{} \n'.format(accuracy))
+
+        results_file = os.path.join(output_dir, "eval_ensemble.txt")
+        print("accuracy: ", accuracy)
+        wandb.log({"ensemble-eval-accuracy": accuracy})
+        with open(results_file, "w") as fh:
+            fh.write("{} \n".format(accuracy))
 
         return
 
     # Step 2: Merge the annotations created by each individual model
     logger.info("Train_pet step 2: merge annotations.")
     logger.info("Time: {}".format(time.ctime()))
-    logits_file = os.path.join(output_dir, 'unlabeled_logits.txt')
-    merge_logits(output_dir, logits_file, reduction, 'unlabeled')
+    logits_file = os.path.join(output_dir, "unlabeled_logits.txt")
+    merge_logits(output_dir, logits_file, reduction, "unlabeled")
     logits = LogitsList.load(logits_file).logits
     assert len(logits) == len(unlabeled_data)
     logger.info("Got {} logits from file {}".format(len(logits), logits_file))
@@ -294,18 +420,37 @@ def train_pet(ensemble_model_config: WrapperConfig, ensemble_train_config: Train
     final_model_config.wrapper_type = SEQUENCE_CLASSIFIER_WRAPPER
     final_train_config.use_logits = True
 
-    train_classifier(final_model_config, final_train_config, final_eval_config, os.path.join(output_dir, 'final'),
-                     repetitions=final_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
-                     eval_data=eval_data, do_train=do_train, do_eval=do_eval, seed=seed)
-    
+    train_classifier(
+        final_model_config,
+        final_train_config,
+        final_eval_config,
+        os.path.join(output_dir, "final"),
+        repetitions=final_repetitions,
+        train_data=train_data,
+        unlabeled_data=unlabeled_data,
+        eval_data=eval_data,
+        do_train=do_train,
+        do_eval=do_eval,
+        seed=seed,
+    )
+
     logger.info("All done!")
     logger.info("Time: {}".format(time.ctime()))
 
 
-def train_classifier(model_config: WrapperConfig, train_config: TrainConfig, eval_config: EvalConfig, output_dir: str,
-                     repetitions: int = 3, train_data: List[InputExample] = None,
-                     unlabeled_data: List[InputExample] = None, eval_data: List[InputExample] = None,
-                     do_train: bool = True, do_eval: bool = True, seed: int = 42):
+def train_classifier(
+    model_config: WrapperConfig,
+    train_config: TrainConfig,
+    eval_config: EvalConfig,
+    output_dir: str,
+    repetitions: int = 3,
+    train_data: List[InputExample] = None,
+    unlabeled_data: List[InputExample] = None,
+    eval_data: List[InputExample] = None,
+    do_train: bool = True,
+    do_eval: bool = True,
+    seed: int = 42,
+):
     """
     Train and evaluate a sequence classification model.
 
@@ -322,17 +467,39 @@ def train_classifier(model_config: WrapperConfig, train_config: TrainConfig, eva
     :param seed: the random seed to use
     """
 
-    train_pet_ensemble(model_config, train_config, eval_config, pattern_ids=[0], output_dir=output_dir,
-                       repetitions=repetitions,
-                       train_data=train_data, unlabeled_data=unlabeled_data, eval_data=eval_data, do_train=do_train,
-                       do_eval=do_eval, seed=seed)
+    train_pet_ensemble(
+        model_config,
+        train_config,
+        eval_config,
+        pattern_ids=[0],
+        output_dir=output_dir,
+        repetitions=repetitions,
+        train_data=train_data,
+        unlabeled_data=unlabeled_data,
+        eval_data=eval_data,
+        do_train=do_train,
+        do_eval=do_eval,
+        seed=seed,
+    )
 
 
-def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, eval_config: EvalConfig,
-                       pattern_ids: List[int], output_dir: str, ipet_data_dir: str = None, repetitions: int = 3,
-                       train_data: List[InputExample] = None, unlabeled_data: List[InputExample] = None,
-                       eval_data: List[InputExample] = None, do_train: bool = True, do_eval: bool = True,
-                       save_unlabeled_logits: bool = False, seed: int = 42):
+def train_pet_ensemble(
+    model_config: WrapperConfig,
+    train_config: TrainConfig,
+    eval_config: EvalConfig,
+    pattern_ids: List[int],
+    output_dir: str,
+    ipet_data_dir: str = None,
+    repetitions: int = 3,
+    train_data: List[InputExample] = None,
+    unlabeled_data: List[InputExample] = None,
+    eval_data: List[InputExample] = None,
+    do_train: bool = True,
+    do_eval: bool = True,
+    save_unlabeled_logits: bool = False,
+    save_train_logits: bool = False,
+    seed: int = 42,
+):
     """
     Train and evaluate an ensemble of PET models without knowledge distillation.
 
@@ -362,10 +529,14 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
             model_config.pattern_id = pattern_id
             results_dict = {}
 
-            pattern_iter_output_dir = "{}/p{}-i{}".format(output_dir, pattern_id, iteration)
+            pattern_iter_output_dir = "{}/p{}-i{}".format(
+                output_dir, pattern_id, iteration
+            )
 
             if os.path.exists(pattern_iter_output_dir):
-                logger.warning(f"Path {pattern_iter_output_dir} already exists, skipping it...")
+                logger.warning(
+                    f"Path {pattern_iter_output_dir} already exists, skipping it..."
+                )
                 continue
 
             if not os.path.exists(pattern_iter_output_dir):
@@ -377,7 +548,9 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
             # Training
             if do_train:
                 if ipet_data_dir:
-                    p = os.path.join(ipet_data_dir, 'p{}-i{}-train.bin'.format(pattern_id, iteration))
+                    p = os.path.join(
+                        ipet_data_dir, "p{}-i{}-train.bin".format(pattern_id, iteration)
+                    )
                     ipet_train_data = InputExample.load_examples(p)
                     for example in ipet_train_data:
                         example.logits = None
@@ -386,31 +559,61 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 
                 logger.info("Train single model ... (one repetition)")
                 logger.info("Time: {}".format(time.ctime()))
-                results_dict.update(train_single_model(wrapper, train_data, train_config, eval_config,
-                                                       ipet_train_data=ipet_train_data,
-                                                       unlabeled_data=unlabeled_data,
-                                                       pattern_iter_output_dir=pattern_iter_output_dir))
+                results_dict.update(
+                    train_single_model(
+                        wrapper,
+                        train_data,
+                        train_config,
+                        eval_config,
+                        ipet_train_data=ipet_train_data,
+                        unlabeled_data=unlabeled_data,
+                        pattern_iter_output_dir=pattern_iter_output_dir,
+                        return_train_set_logits=save_train_logits
+                    )
+                )
 
-                # Saving twice at the end of three epochs 
+                if save_train_logits:
+                    logger.info("Saving training logits")
+                    save_logits(
+                        os.path.join(pattern_iter_output_dir, "train_logits.txt"), results_dict.pop("train_set_logits")
+                    )
+
+                # Saving twice at the end of three epochs
                 # because the final classifier uses the saved models without epoch numbers,
                 # and I also want to save the models with epoch numbers in them for better trackability.
-                with open(os.path.join(pattern_iter_output_dir, 'results.txt'), 'w') as fh:
+                with open(
+                    os.path.join(pattern_iter_output_dir, "results.txt"), "w"
+                ) as fh:
                     fh.write(str(results_dict))
 
-                logger.info("Saving trained model at {}...".format(pattern_iter_output_dir))
+                logger.info(
+                    "Saving trained model at {}...".format(pattern_iter_output_dir)
+                )
                 wrapper.save(pattern_iter_output_dir)
-                train_config.save(os.path.join(pattern_iter_output_dir, 'train_config.json'))
-                eval_config.save(os.path.join(pattern_iter_output_dir, 'eval_config.json'))
+                train_config.save(
+                    os.path.join(pattern_iter_output_dir, "train_config.json")
+                )
+                eval_config.save(
+                    os.path.join(pattern_iter_output_dir, "eval_config.json")
+                )
                 logger.info("Saving complete")
                 logger.info("Time: {}".format(time.ctime()))
 
                 if save_unlabeled_logits:
                     start_time = time.time()
-                    # do not use explanations for labeling 
-                    logits = evaluate(wrapper, unlabeled_data, eval_config, no_expl=True)['logits']
-                    save_logits(os.path.join(pattern_iter_output_dir, 'logits.txt'), logits)
+                    # do not use explanations for labeling
+                    logits = evaluate(
+                        wrapper, unlabeled_data, eval_config, no_expl=True
+                    )["logits"]
+                    save_logits(
+                        os.path.join(pattern_iter_output_dir, "logits.txt"), logits
+                    )
                     end_time = time.time()
-                    logger.info("Label unlabeled logits took {} seconds".format(round(end_time-start_time, 2)))
+                    logger.info(
+                        "Label unlabeled logits took {} seconds".format(
+                            round(end_time - start_time, 2)
+                        )
+                    )
 
                 if not do_eval:
                     wrapper.model = None
@@ -422,23 +625,42 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 logger.info("Starting evaluation...")
                 logger.info("Time: {}".format(time.ctime()))
                 if not wrapper:
-                    wrapper = TransformerModelWrapper.from_pretrained(pattern_iter_output_dir)
+                    wrapper = TransformerModelWrapper.from_pretrained(
+                        pattern_iter_output_dir
+                    )
 
-                eval_result = evaluate(wrapper, eval_data, eval_config, priming_data=train_data)
+                eval_result = evaluate(
+                    wrapper, eval_data, eval_config, priming_data=train_data
+                )
 
-                save_predictions(os.path.join(pattern_iter_output_dir, 'predictions.jsonl'), wrapper, eval_result)
-                save_logits(os.path.join(pattern_iter_output_dir, 'eval_logits.txt'), eval_result['logits'])
+                save_predictions(
+                    os.path.join(pattern_iter_output_dir, "predictions.jsonl"),
+                    wrapper,
+                    eval_result,
+                )
+                save_logits(
+                    os.path.join(pattern_iter_output_dir, "eval_logits.txt"),
+                    eval_result["logits"],
+                )
 
-                scores = eval_result['scores']
-                logger.info("--- RESULT (pattern_id={}, iteration={}) ---".format(pattern_id, iteration))
+                scores = eval_result["scores"]
+                logger.info(
+                    "--- RESULT (pattern_id={}, iteration={}) ---".format(
+                        pattern_id, iteration
+                    )
+                )
                 logger.info(scores)
                 logger.info("Time: {}".format(time.ctime()))
 
-                results_dict['test_set_after_training'] = scores
-                with open(os.path.join(pattern_iter_output_dir, 'results.json'), 'w') as fh:
+                results_dict["test_set_after_training"] = scores
+                with open(
+                    os.path.join(pattern_iter_output_dir, "results.json"), "w"
+                ) as fh:
                     json.dump(results_dict, fh)
-                
-                wandb.log({'p{}-i{}-results'.format(pattern_id, iteration) : results_dict})
+
+                wandb.log(
+                    {"p{}-i{}-results".format(pattern_id, iteration): results_dict}
+                )
 
                 for metric, value in scores.items():
                     results[metric][pattern_id].append(value)
@@ -463,15 +685,22 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
         #                 results['acc'][pattern_id].append(value)
 
         if len(results.keys()) != 0:
-            _write_results(os.path.join(output_dir, 'result_test.txt'), results)
+            _write_results(os.path.join(output_dir, "result_test.txt"), results)
     else:
         logger.info("=== ENSEMBLE TRAINING COMPLETE ===")
 
 
-def train_single_model(model: TransformerModelWrapper, train_data: List[InputExample], config: TrainConfig,
-                       eval_config: EvalConfig = None, ipet_train_data: List[InputExample] = None,
-                       unlabeled_data: List[InputExample] = None, return_train_set_results: bool = True,
-                       pattern_iter_output_dir: str = None):
+def train_single_model(
+    model: TransformerModelWrapper,
+    train_data: List[InputExample],
+    config: TrainConfig,
+    eval_config: EvalConfig = None,
+    ipet_train_data: List[InputExample] = None,
+    unlabeled_data: List[InputExample] = None,
+    return_train_set_results: bool = True,
+    pattern_iter_output_dir: str = None,
+    return_train_set_logits: bool = False,
+):
     """
     Train a single model.
 
@@ -486,7 +715,13 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
     :return: a dictionary containing the global step, average loss and (optionally) results on the train set
     """
 
-    device = torch.device(config.device if config.device else "cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        config.device
+        if config.device
+        else "cuda"
+        if torch.cuda.is_available()
+        else "cpu"
+    )
     if not ipet_train_data:
         ipet_train_data = []
 
@@ -497,15 +732,18 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
 
     if train_data and return_train_set_results:
         logger.info("Get train set before training ...")
-        results_dict['train_set_before_training'] = evaluate(model, train_data, eval_config)['scores']['acc']
+        results_dict["train_set_before_training"] = evaluate(
+            model, train_data, eval_config
+        )["scores"]["acc"]
 
     all_train_data = train_data + ipet_train_data
 
     if not all_train_data and not config.use_logits:
-        logger.warning('Training method was called without training examples')
+        logger.warning("Training method was called without training examples")
     else:
         global_step, tr_loss = model.train(
-            all_train_data, device,
+            all_train_data,
+            device,
             per_gpu_train_batch_size=config.per_gpu_train_batch_size,
             per_gpu_unlabeled_batch_size=config.per_gpu_unlabeled_batch_size,
             n_gpu=config.n_gpu,
@@ -517,26 +755,40 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
             adam_epsilon=config.adam_epsilon,
             warmup_steps=config.warmup_steps,
             max_grad_norm=config.max_grad_norm,
-            unlabeled_data=unlabeled_data if config.lm_training or config.use_logits else None,
+            unlabeled_data=unlabeled_data
+            if config.lm_training or config.use_logits
+            else None,
             lm_training=config.lm_training,
             use_logits=config.use_logits,
             alpha=config.alpha,
             temperature=config.temperature,
             pattern_iter_output_dir=pattern_iter_output_dir,
             train_config=config,
-            eval_config=eval_config
+            eval_config=eval_config,
         )
-        results_dict['global_step'] = global_step
-        results_dict['average_loss'] = tr_loss
+        results_dict["global_step"] = global_step
+        results_dict["average_loss"] = tr_loss
 
-    if train_data and return_train_set_results:
-        results_dict['train_set_after_training'] = evaluate(model, train_data, eval_config)['scores']['acc']
+    if train_data and (return_train_set_results or return_train_set_logits):
+        train_eval_results = evaluate(
+            model, train_data, eval_config
+        )
+        if return_train_set_results:
+            results_dict["train_set_after_training"] = train_eval_results["scores"]["acc"]
+        
+        if return_train_set_logits:
+            results_dict["train_set_logits"] = train_eval_results["logits"]
 
     return results_dict
 
 
-def evaluate(model: TransformerModelWrapper, eval_data: List[InputExample], config: EvalConfig,
-             priming_data: List[InputExample] = None, no_expl: bool = False) -> Dict:
+def evaluate(
+    model: TransformerModelWrapper,
+    eval_data: List[InputExample],
+    config: EvalConfig,
+    priming_data: List[InputExample] = None,
+    no_expl: bool = False
+) -> Dict:
     """
     Evaluate a model.
 
@@ -549,52 +801,71 @@ def evaluate(model: TransformerModelWrapper, eval_data: List[InputExample], conf
 
     if config.priming:
         for example in eval_data:
-            example.meta['priming_data'] = priming_data
+            example.meta["priming_data"] = priming_data
 
-    metrics = config.metrics if config.metrics else ['acc']
-    device = torch.device(config.device if config.device else "cuda" if torch.cuda.is_available() else "cpu")
+    metrics = config.metrics if config.metrics else ["acc"]
+    device = torch.device(
+        config.device
+        if config.device
+        else "cuda"
+        if torch.cuda.is_available()
+        else "cpu"
+    )
 
     model.model.to(device)
-    results = model.eval(eval_data, device, per_gpu_eval_batch_size=config.per_gpu_eval_batch_size,
-                         n_gpu=config.n_gpu, decoding_strategy=config.decoding_strategy, priming=config.priming, no_expl=no_expl)
-
-    predictions = np.argmax(results['logits'], axis=1)
+    results = model.eval(
+        eval_data,
+        device,
+        per_gpu_eval_batch_size=config.per_gpu_eval_batch_size,
+        n_gpu=config.n_gpu,
+        decoding_strategy=config.decoding_strategy,
+        priming=config.priming,
+        no_expl=no_expl,
+    )
+    
+    predictions = np.argmax(results["logits"], axis=1)
     scores = {}
 
     for metric in metrics:
-        if metric == 'acc':
-            scores[metric] = simple_accuracy(predictions, results['labels'])
-        elif metric == 'f1':
-            scores[metric] = f1_score(results['labels'], predictions)
-        elif metric == 'f1-macro':
-            scores[metric] = f1_score(results['labels'], predictions, average='macro')
-        elif metric == 'em':
-            scores[metric] = exact_match(predictions, results['labels'], results['question_ids'])
+        if metric == "acc":
+            scores[metric] = simple_accuracy(predictions, results["labels"])
+        elif metric == "f1":
+            scores[metric] = f1_score(results["labels"], predictions)
+        elif metric == "f1-macro":
+            scores[metric] = f1_score(results["labels"], predictions, average="macro")
+        elif metric == "em":
+            scores[metric] = exact_match(
+                predictions, results["labels"], results["question_ids"]
+            )
         else:
             raise ValueError(f"Metric '{metric}' not implemented")
 
-    results['scores'] = scores
-    results['predictions'] = predictions
+    results["scores"] = scores
+    results["predictions"] = predictions
     return results
 
 
 def _write_results(path: str, results: Dict):
-    with open(path, 'w') as fh:
+    with open(path, "w") as fh:
         for metric in results.keys():
             for pattern_id, values in results[metric].items():
                 mean = statistics.mean(values)
                 stdev = statistics.stdev(values) if len(values) > 1 else 0
                 result_str = "{}-p{}: {} +- {}".format(metric, pattern_id, mean, stdev)
                 logger.info(result_str)
-                fh.write(result_str + '\n')
+                fh.write(result_str + "\n")
 
         for metric in results.keys():
-            all_results = [result for pattern_results in results[metric].values() for result in pattern_results]
+            all_results = [
+                result
+                for pattern_results in results[metric].values()
+                for result in pattern_results
+            ]
             all_mean = statistics.mean(all_results)
             all_stdev = statistics.stdev(all_results) if len(all_results) > 1 else 0
             result_str = "{}-all-p: {} +- {}".format(metric, all_mean, all_stdev)
             logger.info(result_str)
-            fh.write(result_str + '\n')
+            fh.write(result_str + "\n")
 
 
 def merge_logits(logits_dir: str, output_file: str, reduction: str, data_type: str):
@@ -611,37 +882,46 @@ def merge_logits(logits_dir: str, output_file: str, reduction: str, data_type: s
     :param data_type: 'eval' or 'unlabeled'.
     """
     subdirs = next(os.walk(logits_dir))[1]
-    logger.info("Found the following {} subdirectories: {}".format(len(subdirs), subdirs))
+    logger.info(
+        "Found the following {} subdirectories: {}".format(len(subdirs), subdirs)
+    )
 
     all_logits_lists = []
 
     for subdir in subdirs:
-        results_file = os.path.join(logits_dir, subdir, 'results.txt')
-        assert data_type in ['eval', 'unlabeled']
-        if data_type == 'eval':
-            logits_file = os.path.join(logits_dir, subdir, 'eval_logits.txt')
-        elif data_type == 'unlabeled':
-            logits_file = os.path.join(logits_dir, subdir, 'logits.txt')
+        results_file = os.path.join(logits_dir, subdir, "results.txt")
+        assert data_type in ["eval", "unlabeled", "train"]
+        if data_type == "eval":
+            logits_file = os.path.join(logits_dir, subdir, "eval_logits.txt")
+        elif data_type == "unlabeled":
+            logits_file = os.path.join(logits_dir, subdir, "logits.txt")
+        elif data_type == "train":
+            logits_file = os.path.join(logits_dir, subdir, "train_logits.txt")
         logits = []
 
         if not os.path.exists(results_file) or not os.path.exists(logits_file):
-            logger.warning(f"Skipping subdir '{subdir}' because 'results.txt' or 'logits.txt' not found")
+            logger.warning(
+                f"Skipping subdir '{subdir}' because 'results.txt' or 'logits.txt' not found"
+            )
             continue
 
-        if reduction == 'mean':
+        if reduction == "mean":
             result_train = 1
         else:
-            with open(results_file, 'r') as fh:
+            with open(results_file, "r") as fh:
                 results = ast.literal_eval(fh.read())
-                result_train = results['train_set_before_training']
+                result_train = results["train_set_before_training"]
 
-        with open(logits_file, 'r') as fh:
+        with open(logits_file, "r") as fh:
             for line in fh.read().splitlines():
                 example_logits = [float(x) for x in line.split()]
                 logits.append(example_logits)
 
-        logger.info("File {}: Score = {}, #Logits = {}, #Labels = {}".format(
-            results_file, result_train, len(logits), len(logits[0])))
+        logger.info(
+            "File {}: Score = {}, #Logits = {}, #Labels = {}".format(
+                results_file, result_train, len(logits), len(logits[0])
+            )
+        )
 
         loglist = LogitsList(score=result_train, logits=logits)
         all_logits_lists.append(loglist)
@@ -650,7 +930,9 @@ def merge_logits(logits_dir: str, output_file: str, reduction: str, data_type: s
     merged_loglist.save(output_file)
 
 
-def merge_logits_lists(logits_lists: List[LogitsList], reduction: str = 'mean') -> LogitsList:
+def merge_logits_lists(
+    logits_lists: List[LogitsList], reduction: str = "mean"
+) -> LogitsList:
     """
     Merge a list of :class:`LogitsList` objects.
 
@@ -665,9 +947,9 @@ def merge_logits_lists(logits_lists: List[LogitsList], reduction: str = 'mean') 
     logits = np.array([ll.logits for ll in logits_lists])
     weights = np.array([ll.score for ll in logits_lists])
 
-    if reduction == 'mean':
+    if reduction == "mean":
         logits = np.mean(logits, axis=0).tolist()
-    elif reduction == 'wmean':
+    elif reduction == "wmean":
         logits = np.average(logits, axis=0, weights=weights).tolist()
     else:
         raise ValueError("Reduction strategy '{}' not implemented".format(reduction))
@@ -675,9 +957,18 @@ def merge_logits_lists(logits_lists: List[LogitsList], reduction: str = 'mean') 
     return LogitsList(score=-1, logits=logits)
 
 
-def generate_ipet_train_sets(train_data: List[InputExample], unlabeled_data: List[InputExample], labels: List[str],
-                             logits_dir: str, output_dir: str, reduction: str, num_new_examples: int,
-                             logits_percentage: float, n_most_likely: int = -1, seed: int = 42):
+def generate_ipet_train_sets(
+    train_data: List[InputExample],
+    unlabeled_data: List[InputExample],
+    labels: List[str],
+    logits_dir: str,
+    output_dir: str,
+    reduction: str,
+    num_new_examples: int,
+    logits_percentage: float,
+    n_most_likely: int = -1,
+    seed: int = 42,
+):
     """
     Generate training sets for the next generation of iPET models.
 
@@ -701,13 +992,19 @@ def generate_ipet_train_sets(train_data: List[InputExample], unlabeled_data: Lis
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    logger.info("Found the following {} subdirectories: {}".format(len(subdirs), subdirs))
+    logger.info(
+        "Found the following {} subdirectories: {}".format(len(subdirs), subdirs)
+    )
 
     if train_data:
-        train_examples_per_label = [sum(1 for ex in train_data if ex.label == label) for label in labels]
+        train_examples_per_label = [
+            sum(1 for ex in train_data if ex.label == label) for label in labels
+        ]
         multiplier = num_new_examples / len(train_data)
         examples_per_label = [int(epl * multiplier) for epl in train_examples_per_label]
-        logger.info(f"Example distribution in the original dataset: {train_examples_per_label}")
+        logger.info(
+            f"Example distribution in the original dataset: {train_examples_per_label}"
+        )
     else:
         examples_per_label = eq_div(num_new_examples, len(labels))
 
@@ -722,28 +1019,33 @@ def generate_ipet_train_sets(train_data: List[InputExample], unlabeled_data: Lis
     rng_np = np.random.RandomState(seed)
 
     for subdir in subdirs:
-        results_file = os.path.join(logits_dir, subdir, 'results.txt')
-        logits_file = os.path.join(logits_dir, subdir, 'logits.txt')
+        results_file = os.path.join(logits_dir, subdir, "results.txt")
+        logits_file = os.path.join(logits_dir, subdir, "logits.txt")
         logits = []
 
         if not os.path.exists(results_file) or not os.path.exists(logits_file):
-            logger.warning(f"Skipping subdir '{subdir}' because 'results.txt' or 'logits.txt' not found")
+            logger.warning(
+                f"Skipping subdir '{subdir}' because 'results.txt' or 'logits.txt' not found"
+            )
             continue
 
-        if reduction == 'mean':
+        if reduction == "mean":
             result_train = 1
         else:
-            with open(results_file, 'r') as fh:
+            with open(results_file, "r") as fh:
                 results = ast.literal_eval(fh.read())
-                result_train = results['train_set_before_training']
+                result_train = results["train_set_before_training"]
 
-        with open(logits_file, 'r') as fh:
+        with open(logits_file, "r") as fh:
             for line in fh.read().splitlines():
                 example_logits = [float(x) for x in line.split()]
                 logits.append(example_logits)
 
-        logger.info("File {}: Score = {}, #Logits = {}, #Labels = {}".format(
-            results_file, result_train, len(logits), len(logits[0])))
+        logger.info(
+            "File {}: Score = {}, #Logits = {}, #Labels = {}".format(
+                results_file, result_train, len(logits), len(logits[0])
+            )
+        )
 
         loglist = LogitsList(score=result_train, logits=logits)
         logits_lists[subdir] = loglist
@@ -751,18 +1053,33 @@ def generate_ipet_train_sets(train_data: List[InputExample], unlabeled_data: Lis
     for subdir in subdirs:
         other_logits_lists = [ll for sd, ll in logits_lists.items() if sd != subdir]
         subdir_train_set = generate_ipet_train_set(
-            other_logits_lists, labels=labels, original_data=unlabeled_data, examples_per_label=examples_per_label,
-            logits_percentage=logits_percentage, reduction=reduction, n_most_likely=n_most_likely, rng=rng,
-            rng_np=rng_np
+            other_logits_lists,
+            labels=labels,
+            original_data=unlabeled_data,
+            examples_per_label=examples_per_label,
+            logits_percentage=logits_percentage,
+            reduction=reduction,
+            n_most_likely=n_most_likely,
+            rng=rng,
+            rng_np=rng_np,
         )
 
-        InputExample.save_examples(subdir_train_set,
-                                   os.path.join(output_dir, subdir + '-train.bin'))
+        InputExample.save_examples(
+            subdir_train_set, os.path.join(output_dir, subdir + "-train.bin")
+        )
 
 
-def generate_ipet_train_set(logits_lists: List[LogitsList], labels: List[str], original_data: List[InputExample],
-                            examples_per_label: List[int], logits_percentage: float, reduction: str = 'mean',
-                            n_most_likely: int = -1, rng=None, rng_np=None) -> List[InputExample]:
+def generate_ipet_train_set(
+    logits_lists: List[LogitsList],
+    labels: List[str],
+    original_data: List[InputExample],
+    examples_per_label: List[int],
+    logits_percentage: float,
+    reduction: str = "mean",
+    n_most_likely: int = -1,
+    rng=None,
+    rng_np=None,
+) -> List[InputExample]:
     """
     Generate a single training set for the next generation of iPET models.
 
@@ -790,10 +1107,10 @@ def generate_ipet_train_set(logits_lists: List[LogitsList], labels: List[str], o
     logits = np.array([ll.logits for ll in logits_lists])
     weights = np.array([ll.score for ll in logits_lists])
 
-    if reduction == 'mean':
+    if reduction == "mean":
         logits = np.mean(logits, axis=0)
         logits = softmax(logits, axis=1).tolist()
-    elif reduction == 'wmean':
+    elif reduction == "wmean":
         logits = np.average(logits, axis=0, weights=weights)
         logits = softmax(logits, axis=1).tolist()
     else:
@@ -811,12 +1128,16 @@ def generate_ipet_train_set(logits_lists: List[LogitsList], labels: List[str], o
 
         if n_most_likely <= 0:
             examples = [ex for ex in original_data if ex.label == label]
-            logger.info("There are {} examples for label {}".format(len(examples), label))
+            logger.info(
+                "There are {} examples for label {}".format(len(examples), label)
+            )
             while len(examples) < examples_per_label[idx]:
                 # upsample examples if there are too few
                 examples.extend(ex for ex in original_data if ex.label == label)
         else:
-            examples = [(ex.logits[idx], ex_idx, ex) for ex_idx, ex in enumerate(original_data)]
+            examples = [
+                (ex.logits[idx], ex_idx, ex) for ex_idx, ex in enumerate(original_data)
+            ]
             examples.sort(reverse=True)
             examples = [ex for score, ex_idx, ex in examples[:n_most_likely]]
             examples = [deepcopy(ex) for ex in examples]
@@ -825,14 +1146,20 @@ def generate_ipet_train_set(logits_lists: List[LogitsList], labels: List[str], o
                 example.label = label
 
         label_examples = _draw_examples_by_label_probability(
-            examples=examples, num_examples=examples_per_label[idx], rng=rng_np)
+            examples=examples, num_examples=examples_per_label[idx], rng=rng_np
+        )
         test_set.extend(label_examples)
 
     return test_set
 
 
-def _draw_examples_by_label_probability(examples: List[InputExample], num_examples: int, rng) -> List[InputExample]:
+def _draw_examples_by_label_probability(
+    examples: List[InputExample], num_examples: int, rng
+) -> List[InputExample]:
     label_probabilities = [max(example.logits) for example in examples]
     sum_label_probabilities = sum(label_probabilities)
     label_probabilities = [p / sum_label_probabilities for p in label_probabilities]
-    return rng.choice(examples, size=num_examples, replace=False, p=label_probabilities).tolist()
+    return rng.choice(
+        examples, size=num_examples, replace=False, p=label_probabilities
+    ).tolist()
+

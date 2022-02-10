@@ -108,7 +108,8 @@ class WrapperConfig(object):
     """A configuration for a :class:`TransformerModelWrapper`."""
 
     def __init__(self, model_type: str, model_name_or_path: str, wrapper_type: str, task_name: str, max_seq_length: int,
-                 label_list: List[str], pattern_id: int = 0, verbalizer_file: str = None, cache_dir: str = None):
+                 label_list: List[str], pattern_id: int = 0, verbalizer_file: str = None, cache_dir: str = None,
+                 beta: float = 1.0, beta_requires_grad: bool = False):
         """
         Create a new config.
 
@@ -131,7 +132,21 @@ class WrapperConfig(object):
         self.pattern_id = pattern_id
         self.verbalizer_file = verbalizer_file
         self.cache_dir = cache_dir
+        self.beta = beta
+        self.beta_requires_grad = beta_requires_grad
 
+class AdditiveLogitsCombination(nn.Module):
+    def __init__(self, beta=1.0, beta_requires_grad=False):
+        logger.info(f"Initializing combine_logits module with beta={beta} and beta_requires_grad={beta_requires_grad}")
+        super().__init__()
+        if beta_requires_grad:
+            self.beta = nn.Parameter(torch.tensor(beta))
+        else:
+            self.beta = beta
+
+    def forward(self, logits, calibration_logits):
+        # When beta = 1, ignores calibration logits
+        return logits * self.beta + calibration_logits * (1 - self.beta)
 
 class TransformerModelWrapper:
     """A wrapper around a Transformer-based language model."""
@@ -156,6 +171,8 @@ class TransformerModelWrapper:
 
         self.model = model_class.from_pretrained(config.model_name_or_path, config=model_config,
                                                  cache_dir=config.cache_dir if config.cache_dir else None)
+        self.combine_logits = AdditiveLogitsCombination(beta=config.beta,
+                                                 beta_requires_grad=config.beta_requires_grad)
 
         self.preprocessor = PREPROCESSORS[self.config.wrapper_type](self, self.config.task_name, self.config.pattern_id,
                                                                     self.config.verbalizer_file)
@@ -257,7 +274,8 @@ class TransformerModelWrapper:
         optimizer_grouped_parameters = [
             {'params': [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': weight_decay},
-            {'params': [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+            {'params': [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)] +
+             [p for p in self.combine_logits.parameters()],
              'weight_decay': 0.0}
         ]
 
@@ -311,6 +329,11 @@ class TransformerModelWrapper:
                     loss = loss / gradient_accumulation_steps
 
                 loss.backward()
+
+                try:
+                    wandb.log({'beta' : self.combine_logits.beta})
+                except:
+                    pass
 
                 tr_loss += loss.item()
                 if (step + 1) % gradient_accumulation_steps == 0:
@@ -508,6 +531,11 @@ class TransformerModelWrapper:
 
         outputs = self.model(**inputs)
         prediction_scores = self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(mlm_labels, outputs[0])
+
+        if 'logits' in labeled_batch:
+            calibration_logits = labeled_batch['logits']
+            prediction_scores = self.combine_logits(prediction_scores, calibration_logits)
+
         loss = nn.CrossEntropyLoss()(prediction_scores.view(-1, len(self.config.label_list)), labels.view(-1))
         wandb.log({"cls_loss" : loss})
         if lm_training:
@@ -527,7 +555,6 @@ class TransformerModelWrapper:
         outputs = self.model(**inputs)
         prediction_scores = self.preprocessor.pvp.convert_plm_logits_to_cls_logits(outputs[0])
         loss = nn.CrossEntropyLoss()(prediction_scores.view(-1, len(self.config.label_list)), labels.view(-1))
-
         if lm_training:
             raise NotImplementedError("Language model training is currently not implemented for PLMs")
 
@@ -553,7 +580,11 @@ class TransformerModelWrapper:
         """Perform a MLM evaluation step."""
         inputs = self.generate_default_inputs(batch)
         outputs = self.model(**inputs)
-        return self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(batch['mlm_labels'], outputs[0])
+        prediction_scores = self.preprocessor.pvp.convert_mlm_logits_to_cls_logits(batch['mlm_labels'], outputs[0])
+        if 'logits' in batch:
+            calibration_logits = batch['logits']
+            prediction_scores = self.combine_logits(prediction_scores, calibration_logits)
+        return prediction_scores
 
     def plm_eval_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Perform a PLM evaluation step."""
