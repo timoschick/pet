@@ -38,7 +38,7 @@ def load_pet_configs(args) -> Tuple[WrapperConfig, pet.TrainConfig, pet.EvalConf
     model_cfg = WrapperConfig(model_type=args.model_type, model_name_or_path=args.model_name_or_path,
                               wrapper_type=args.wrapper_type, task_name=args.task_name, label_list=args.label_list,
                               max_seq_length=args.pet_max_seq_length, verbalizer_file=args.verbalizer_file,
-                              cache_dir=args.cache_dir)
+                              cache_dir=args.cache_dir, beta=args.beta, beta_requires_grad=args.beta_requires_grad)
 
     train_cfg = pet.TrainConfig(device=args.device, per_gpu_train_batch_size=args.pet_per_gpu_train_batch_size,
                                 per_gpu_unlabeled_batch_size=args.pet_per_gpu_unlabeled_batch_size, n_gpu=args.n_gpu,
@@ -222,7 +222,17 @@ def main():
                         help="Whether to use explanations patterns for mlm auxiliary task")
     parser.add_argument('--e_pet_test', action='store_true',
                         help="Whether to use explanations patterns for testing pet")
-    parser.add_argument('--wandb_run_name', type=str, default=None)
+    parser.add_argument('--wandb_run_name', type=str, default=None, help="Name to display for this run on wandb")
+    parser.add_argument('--save_train_logits', action='store_true', help="Whether to save the training logits")
+    parser.add_argument('--train_custom_expl_file', type=str, default=None, help="Aligned custom explanations with training set")
+    parser.add_argument('--dev_custom_expl_file', type=str, default=None, help="Aligned custom explanations with dev set")
+    parser.add_argument('--test_custom_expl_file', type=str, default=None, help="Aligned custom explanations with test set")
+
+    # calibration args
+    parser.add_argument('--beta', type=float, default=1.0, help="beta value for combining logits with calibration logits." +
+        " set to 1.0 to ignore calibration logits, and set to 0.0 to exclusively use calibration logits.")
+    parser.add_argument('--beta_requires_grad', action='store_true', help="set to true to make beta a learnable parameter")
+
 
     args = parser.parse_args()
     logger.info("Parameters: {}".format(args))
@@ -253,13 +263,20 @@ def main():
         train_ex, test_ex = None, None
 
     eval_set = TEST_SET if args.eval_set == 'test' else DEV_SET
+    custom_eval_expl_file = args.test_custom_expl_file if args.eval_set == 'test' else args.dev_custom_expl_file
+    
 
     train_data = load_examples(
-        args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex, num_examples_per_label=train_ex_per_label, no_expl=not args.e_pet_pred)
+        args.task_name, args.data_dir, TRAIN_SET, num_examples=train_ex,
+         num_examples_per_label=train_ex_per_label, no_expl=not args.e_pet_pred,
+         expl_file=args.train_custom_expl_file)
     eval_data = load_examples(
-        args.task_name, args.data_dir, eval_set, num_examples=test_ex, num_examples_per_label=test_ex_per_label, no_expl=not args.e_pet_test)
+        args.task_name, args.data_dir, eval_set,
+         num_examples=test_ex, num_examples_per_label=test_ex_per_label, no_expl=not args.e_pet_test,
+         expl_file=custom_eval_expl_file)
     unlabeled_data = load_examples(
-        args.task_name, args.data_dir, UNLABELED_SET, num_examples=args.unlabeled_examples, no_expl=not args.e_pet_lm)
+        args.task_name, args.data_dir, UNLABELED_SET,
+         num_examples=args.unlabeled_examples, no_expl=not args.e_pet_lm)
 
     logger.info("Getting metrics ...")
     args.metrics = METRICS.get(args.task_name, DEFAULT_METRICS)
@@ -277,7 +294,7 @@ def main():
                       ensemble_repetitions=args.pet_repetitions, final_repetitions=args.sc_repetitions,
                       reduction=args.reduction, train_data=train_data, unlabeled_data=unlabeled_data,
                       eval_data=eval_data, do_train=args.do_train, do_eval=args.do_eval,
-                      no_distillation=args.no_distillation, seed=args.seed)
+                      no_distillation=args.no_distillation, seed=args.seed, save_train_logits=args.save_train_logits)
 
     elif args.method == 'ipet':
         pet.train_ipet(pet_model_cfg, pet_train_cfg, pet_eval_cfg, ipet_cfg, sc_model_cfg, sc_train_cfg, sc_eval_cfg,
