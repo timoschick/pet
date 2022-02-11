@@ -135,6 +135,8 @@ def get_accuracy(args, prompt, model, tokenizer, after_string=None):
 
     correct = 0
     total = 0
+    pred_dsn = {"contradiction": 0, "entailment": 0, "neutral": 0}
+    correct_pred_dsn = {"contradiction": 0, "entailment": 0, "neutral": 0}
     for row in tqdm(process_dataset(args.dataset_file)):
         gpt_label = generate_label(
             args,
@@ -148,11 +150,14 @@ def get_accuracy(args, prompt, model, tokenizer, after_string=None):
         )
         if gpt_label in label_map:
             gpt_label = label_map[gpt_label]
+            pred_dsn[gpt_label] += 1
         if gpt_label == row['label']:
             correct += 1
-            print('gold = gpt label: ', gpt_label)
+            correct_pred_dsn[gpt_label] += 1
         total += 1
     print('accuracy: ', correct/total)
+    print('pred distribution: ', pred_dsn)
+    print('pred correct_pred_dsn: ', correct_pred_dsn)
 
 
 def main():
