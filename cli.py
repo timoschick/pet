@@ -72,7 +72,8 @@ def load_sequence_classifier_configs(args) -> Tuple[WrapperConfig, pet.TrainConf
                                 gradient_accumulation_steps=args.sc_gradient_accumulation_steps,
                                 weight_decay=args.weight_decay, learning_rate=args.learning_rate,
                                 adam_epsilon=args.adam_epsilon, warmup_steps=args.warmup_steps,
-                                max_grad_norm=args.max_grad_norm, use_logits=args.method != 'sequence_classifier')
+                                max_grad_norm=args.max_grad_norm, use_logits=args.method != 'sequence_classifier',
+                                sc_eval_during_train=args.sc_eval_during_train, sc_eval_steps=args.sc_eval_steps)
 
     eval_cfg = pet.EvalConfig(device=args.device, n_gpu=args.n_gpu, metrics=args.metrics,
                               per_gpu_eval_batch_size=args.sc_per_gpu_eval_batch_size)
@@ -165,6 +166,10 @@ def main():
     parser.add_argument("--sc_max_steps", default=-1, type=int,
                         help="If > 0: set total number of training steps to perform for sequence classifier training. "
                              "Override num_train_epochs.")
+    parser.add_argument("--sc_eval_during_train", action='store_true',
+                        help="Whether to evaluate during training for sequence classifier.")
+    parser.add_argument("--sc_eval_steps", default=-1, type=int,
+                        help="Evaluate after every this number of steps during training for sequence classifier.")
 
     # iPET-specific optional parameters
     parser.add_argument("--ipet_generations", default=3, type=int,
@@ -287,9 +292,14 @@ def main():
                        eval_data=eval_data, do_train=args.do_train, do_eval=args.do_eval, seed=args.seed)
 
     elif args.method == 'sequence_classifier':
+        # baseline: do not use unlabeled data
+        sc_train_cfg.use_logits = False 
+        sc_train_cfg.lm_training = False 
+
         pet.train_classifier(sc_model_cfg, sc_train_cfg, sc_eval_cfg, output_dir=args.output_dir,
                              repetitions=args.sc_repetitions, train_data=train_data, unlabeled_data=unlabeled_data,
-                             eval_data=eval_data, do_train=args.do_train, do_eval=args.do_eval, seed=args.seed)
+                             eval_data=eval_data, do_train=args.do_train, do_eval=args.do_eval, seed=args.seed,
+                             )
 
     else:
         raise ValueError(f"Training method '{args.method}' not implemented")

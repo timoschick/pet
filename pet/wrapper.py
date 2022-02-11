@@ -200,6 +200,7 @@ class TransformerModelWrapper:
               max_steps=-1, pattern_iter_output_dir: str = None, 
               # train_config: TrainConfig = None, eval_config: EvalConfig = None, 
               train_config = None, eval_config = None, 
+              sc_eval_during_train=False, sc_eval_steps=None, eval_data=None, 
               **_):
         """
         Train the underlying language model.
@@ -334,27 +335,13 @@ class TransformerModelWrapper:
                     epoch_iterator.close()
                     break
                 step += 1
-            
-            # pattern_iter_epoch_output_dir = "{}-e{}".format(pattern_iter_output_dir, epoch_idx)
 
-            # if os.path.exists(pattern_iter_epoch_output_dir):
-            #     logger.warning(f"Path {pattern_iter_epoch_output_dir} already exists, skipping it...")
-            #     continue
-
-            # if not os.path.exists(pattern_iter_epoch_output_dir):
-            #     os.makedirs(pattern_iter_epoch_output_dir)
-
-            # results_dict = {}
-            # results_dict['global_step'] = global_step
-            # results_dict['average_loss'] = (tr_loss / global_step if global_step > 0 else -1)
-            # with open(os.path.join(pattern_iter_epoch_output_dir, 'results.txt'), 'w') as fh:
-            #     fh.write(str(results_dict))
-
-            # logger.info("Saving trained model at {}...".format(pattern_iter_epoch_output_dir))
-            # self.save(pattern_iter_epoch_output_dir)
-            # train_config.save(os.path.join(pattern_iter_epoch_output_dir, 'train_config.json'))
-            # eval_config.save(os.path.join(pattern_iter_epoch_output_dir, 'eval_config.json'))
-            # logger.info("Saving complete")
+                # evaluate during training
+                if sc_eval_during_train and step % sc_eval_steps == 0:
+                        eval_logits=self.eval(eval_data, device, per_gpu_eval_batch_size=eval_config.per_gpu_eval_batch_size,
+                        n_gpu=eval_config.n_gpu, decoding_strategy=eval_config.decoding_strategy, priming=eval_config.priming, 
+                        log_loss=True
+                        )
 
             if 0 < max_steps < global_step:
                 train_iterator.close()
@@ -364,7 +351,7 @@ class TransformerModelWrapper:
 
     def eval(self, eval_data: List[InputExample], device, per_gpu_eval_batch_size: int = 8, n_gpu: int = 1,
              priming: bool = False, decoding_strategy: str = 'default',
-             no_expl: bool = False) -> Dict:
+             no_expl: bool = False, log_loss: bool = False) -> Dict:
         """
         Evaluate the underlying language model.
 
@@ -388,6 +375,8 @@ class TransformerModelWrapper:
 
         preds = None
         all_indices, out_label_ids, question_ids = None, None, None
+        eval_loss = 0.0
+        count = 1
 
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             self.model.eval()
@@ -404,6 +393,14 @@ class TransformerModelWrapper:
                 if logits is None:
                     logits = EVALUATION_STEP_FUNCTIONS[self.config.wrapper_type](self)(batch)
 
+            if log_loss:
+                ce_loss = nn.CrossEntropyLoss()
+                loss=ce_loss(logits.view(-1, len(self.config.label_list)), labels.view(-1))
+                if n_gpu > 1:
+                    loss = loss.mean()  # mean() to average on multi-gpu parallel training
+                eval_loss += loss.item()
+                count += 1
+
             if preds is None:
                 preds = logits.detach().cpu().numpy()
                 out_label_ids = labels.detach().cpu().numpy()
@@ -416,6 +413,14 @@ class TransformerModelWrapper:
                 all_indices = np.append(all_indices, indices.detach().cpu().numpy(), axis=0)
                 if 'question_idx' in batch:
                     question_ids = np.append(question_ids, batch['question_idx'].detach().cpu().numpy(), axis=0)
+
+        if log_loss:
+            wandb.log({"sc_eval_loss" : eval_loss/count})
+            # compute accuracy
+            from transformers.data.metrics import simple_accuracy
+            predictions = np.argmax(preds, axis=1)
+            accuracy = simple_accuracy(predictions, out_label_ids)
+            wandb.log({"sc_eval_acc" : accuracy})
 
         return {
             'indices': all_indices,
@@ -547,6 +552,7 @@ class TransformerModelWrapper:
             logits_predicted, logits_target = outputs[0], batch['logits']
             return distillation_loss(logits_predicted, logits_target, temperature)
         else:
+            wandb.log({"sc_train_loss" : outputs[0]})
             return outputs[0]
 
     def mlm_eval_step(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:

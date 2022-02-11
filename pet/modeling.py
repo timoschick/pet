@@ -60,7 +60,7 @@ class TrainConfig(PetConfig):
                  n_gpu: int = 1, num_train_epochs: int = 3, max_steps: int = -1, gradient_accumulation_steps: int = 1,
                  weight_decay: float = 0.0, learning_rate: float = 5e-5, adam_epsilon: float = 1e-8,
                  warmup_steps: int = 0, max_grad_norm: float = 1, lm_training: bool = False, use_logits: bool = False,
-                 alpha: float = 0.9999, temperature: float = 1):
+                 alpha: float = 0.9999, temperature: float = 1, sc_eval_during_train=False, sc_eval_steps=None):
         """
         Create a new training config.
 
@@ -97,6 +97,8 @@ class TrainConfig(PetConfig):
         self.use_logits = use_logits
         self.alpha = alpha
         self.temperature = temperature
+        self.sc_eval_during_train=sc_eval_during_train
+        self.sc_eval_steps=sc_eval_steps
 
 
 class EvalConfig(PetConfig):
@@ -389,7 +391,8 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
                 results_dict.update(train_single_model(wrapper, train_data, train_config, eval_config,
                                                        ipet_train_data=ipet_train_data,
                                                        unlabeled_data=unlabeled_data,
-                                                       pattern_iter_output_dir=pattern_iter_output_dir))
+                                                       pattern_iter_output_dir=pattern_iter_output_dir,
+                                                       eval_data=eval_data))
 
                 # Saving twice at the end of three epochs 
                 # because the final classifier uses the saved models without epoch numbers,
@@ -471,7 +474,7 @@ def train_pet_ensemble(model_config: WrapperConfig, train_config: TrainConfig, e
 def train_single_model(model: TransformerModelWrapper, train_data: List[InputExample], config: TrainConfig,
                        eval_config: EvalConfig = None, ipet_train_data: List[InputExample] = None,
                        unlabeled_data: List[InputExample] = None, return_train_set_results: bool = True,
-                       pattern_iter_output_dir: str = None):
+                       pattern_iter_output_dir: str = None, eval_data=None):
     """
     Train a single model.
 
@@ -524,7 +527,10 @@ def train_single_model(model: TransformerModelWrapper, train_data: List[InputExa
             temperature=config.temperature,
             pattern_iter_output_dir=pattern_iter_output_dir,
             train_config=config,
-            eval_config=eval_config
+            eval_config=eval_config,
+            sc_eval_during_train=config.sc_eval_during_train,
+            sc_eval_steps=config.sc_eval_steps,
+            eval_data=eval_data,
         )
         results_dict['global_step'] = global_step
         results_dict['average_loss'] = tr_loss
