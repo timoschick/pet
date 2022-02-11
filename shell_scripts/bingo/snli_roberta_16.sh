@@ -5,11 +5,12 @@ TASK=esnli-100
 
 NUM_TRAIN=48
 NUM_TEST=-1
-MSG=snli_roberta
+MSG=snli_roberta_accumu2
 
 METHOD=sequence_classifier
 SC_STEPS=$1
 SC_BATCH=$2
+SC_EVAL_BATCH=$3
 
 export CUDA_VISIBLE_DEVICES=0
 
@@ -28,8 +29,9 @@ python3 cli.py \
 --test_examples $NUM_TEST \
 --sc_max_steps $SC_STEPS \
 --sc_per_gpu_train_batch_size $SC_BATCH \
---sc_gradient_accumulation_steps 1 \
+--sc_per_gpu_eval_batch_size $SC_EVAL_BATCH \
+--sc_gradient_accumulation_steps 2 \
 --split_examples_evenly \
---wandb_run_name snli_roberta_T${NUM_TRAIN}_steps${SC_STEPS}_batchsize${SC_BATCH} \
+--wandb_run_name snli_roberta_T${NUM_TRAIN}_steps${SC_STEPS}_batchsize${SC_BATCH}_${MSG} \
 --sc_eval_steps 100 \
 --sc_eval_during_train
