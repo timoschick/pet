@@ -155,7 +155,11 @@ class TransformerModelWrapper:
 
         self.model = model_class.from_pretrained(config.model_name_or_path, config=model_config,
                                                  cache_dir=config.cache_dir if config.cache_dir else None)
-
+        #Multi GPU Training
+        n_gpus = torch.cuda.device_count()
+        if n_gpus >1:
+            self.model = torch.nn.DataParallel(self.model)
+        
         self.preprocessor = PREPROCESSORS[self.config.wrapper_type](self, self.config.task_name, self.config.pattern_id,
                                                                     self.config.verbalizer_file)
         self.task_helper = TASK_HELPERS[self.config.task_name](self) if self.config.task_name in TASK_HELPERS else None
@@ -261,9 +265,6 @@ class TransformerModelWrapper:
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps,
                                                     num_training_steps=t_total)
 
-        # multi-gpu training
-        if n_gpu > 1:
-            self.model = torch.nn.DataParallel(self.model)
 
         step = 0
         global_step = 0
@@ -355,9 +356,6 @@ class TransformerModelWrapper:
         eval_batch_size = per_gpu_eval_batch_size * max(1, n_gpu)
         eval_sampler = SequentialSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=eval_batch_size)
-
-        if n_gpu > 1:
-            self.model = torch.nn.DataParallel(self.model)
 
         preds = None
         all_indices, out_label_ids, question_ids = None, None, None
